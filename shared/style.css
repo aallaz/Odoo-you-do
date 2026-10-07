@@ -1,0 +1,186 @@
+/* Style commun UI-Minimal-Odoo : plat, sans dégradé ni ombre, police Prompt.
+   Une page charge ce fichier puis ajoute ses règles propres dans son <style>.
+   Largeur de la page : définir --main-width dans le :root de la page (défaut 640px). */
+@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&display=swap');
+
+:root {
+  --ink: #7b7b7b;          /* texte, icônes */
+  --muted: #7b7b7b;        /* texte secondaire */
+  --faint: rgba(123, 123, 123, 0.6);   /* texte désactivé */
+  --strong: #1a1a1a;       /* texte en gras */
+  --title: #000000;        /* titres (h1) */
+  --on-accent: #000000;    /* texte posé sur un aplat --accent */
+  --bg: #f6f4f1;           /* fond de page */
+  --card: #ffffff;         /* fond des bulles (cartes, champs, boutons) */
+  --line: transparent;     /* bordures (test : masquées ; remettre #7b7b7b pour les afficher) */
+  --sep: rgba(123, 123, 123, 0.3);     /* séparateurs internes */
+  --border: 1px solid var(--line);
+  --accent: #ecab0f;       /* couleur forte (jaune) : un seul accent */
+  --danger: #fc4345;       /* rouge : valeurs négatives */
+  --ok: #9a8f63;           /* succès */
+  --font: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ---------- Base ---------- */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  min-height: 100dvh;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  padding: 24px 18px 60px;
+}
+
+/* ---------- Mise en page ---------- */
+
+main { width: 100%; max-width: var(--main-width, 640px); }
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  margin-bottom: 16px;
+}
+
+.back-link:hover { color: var(--accent); }
+
+h1 {
+  color: var(--title);
+  font-size: 28px;
+  font-weight: 500;
+  margin: 0 0 16px;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Contrôles et boutons ---------- */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 7px 10px;
+}
+
+.controls input[type="date"] {
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  color: var(--ink);
+}
+
+.controls button {
+  font: inherit;
+  font-weight: 500;
+  padding: 9px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.controls button:hover { background: var(--bg); }
+
+/* ---------- Tableaux ---------- */
+
+.table-wrap {
+  padding-bottom: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink) transparent;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  overflow: auto;
+}
+
+th, td {
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--sep);
+  text-align: right;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+
+th:first-child, td:first-child {
+  position: sticky;
+  left: 0;
+  text-align: left;
+  background: var(--card);
+}
+
+thead th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+tbody tr:hover td { background: var(--bg); }
+
+tbody tr:hover td:first-child { background: var(--bg); }
+
+tfoot td {
+  font-weight: 600;
+  border-top: 1px solid var(--ink);
+  border-bottom: none;
+}
+
+.day-link {
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--accent);
+}
+
+.day-link:hover { text-decoration: underline; }
+
+.cell-empty { color: var(--faint); }
+
+.back-to-table {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.back-to-table:hover { color: var(--accent); }
+
+strong, tfoot td { color: var(--strong); }
+
+/* ---------- États ---------- */
+
+.empty-state {
+  padding: 36px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
+}

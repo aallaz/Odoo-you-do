@@ -1,0 +1,12 @@
+{
+  "id": "daily-project-report",
+  "name": "Report",
+  "version": "0.2.0",
+  "description": "A daily project time report that includes completed tasks and hides Inbox by default.",
+  "manifestVersion": 1,
+  "minSupVersion": "14.0.0",
+  "iFrame": true,
+  "sidePanel": false,
+  "hooks": [],
+  "permissions": ["getTasks", "getArchivedTasks", "getAllProjects"]
+}

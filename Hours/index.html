@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#f6f4f1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Hours</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23f6f4f1%22/><path d=%22M50 24 v22 M39 35 h22%22 stroke=%22%23ecab0f%22 stroke-width=%229%22 stroke-linecap=%22round%22/><path d=%22M39 68 h22%22 stroke=%22%237b7b7b%22 stroke-width=%229%22 stroke-linecap=%22round%22/></svg>">
+
+<link rel="stylesheet" href="../shared/style.css">
+<style>
+  :root {
+    --plus: var(--ink);
+    --minus: var(--danger);
+    --main-width: 600px;
+  }
+
+  /* Du / au / Objectif sur une ligne, Actualiser en dessous */
+  .controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .controls label { min-width: 0; }
+  .controls label input { flex: 1; min-width: 0; }
+  .controls button { grid-column: 1 / -1; justify-self: start; }
+  @media (max-width: 520px) { .controls { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  table { border-collapse: collapse; width: 100%; }
+
+  .plus { color: var(--plus); font-weight: 500; }
+
+  .minus { color: var(--minus); font-weight: 500; }
+
+  .zero { color: var(--muted); }
+
+  .live { font-size: 11.5px; color: var(--accent); margin-left: 6px; }
+
+  .controls input[type="time"] { border: none; outline: none; background: transparent; font: inherit; color: var(--ink); }
+
+  th:nth-child(n+2), td:nth-child(n+2) { width: 1%; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back-link" href="/">← Accueil</a>
+  <h1>Hours</h1>
+
+  <div class="controls">
+    <label>Du <input type="date" id="startDate"></label>
+    <label>au <input type="date" id="endDate"></label>
+    <label>Objectif <input type="time" id="target" value="08:00"></label>
+    <button id="refreshBtn" type="button">Actualiser</button>
+  </div>
+
+  <div class="table-wrap" id="wrap"></div>
+</main>
+
+<script>
+  // Heures de pointage Odoo par jour (/api/attendance, lecture seule) comparées à l'objectif quotidien.
+  const wrap = document.getElementById('wrap');
+  const startInput = document.getElementById('startDate');
+  const endInput = document.getElementById('endDate');
+  const targetInput = document.getElementById('target');
+
+  let days = [];   // [{date, minutes, open}]
+
+  function localISO(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // 502 -> "8:22"
+  function fmtHM(mins) {
+    const m = Math.round(mins);
+    return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
+  }
+
+  // +22 -> "+0:22", -25 -> "-0:25", 0 -> "0:00"
+  function fmtDelta(mins) {
+    const m = Math.round(mins);
+    if (m === 0) return '<span class="zero">0:00</span>';
+    const sign = m > 0 ? '+' : '-';
+    return `<span class="${m > 0 ? 'plus' : 'minus'}">${sign}${fmtHM(Math.abs(m))}</span>`;
+  }
+
+  function fmtDay(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('fr-CH', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function targetMinutes() {
+    const [h, m] = (targetInput.value || '08:00').split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  function render() {
+    if (!days.length) {
+      wrap.innerHTML = '<p class="empty-state">Aucun pointage sur cette période.</p>';
+      return;
+    }
+
+    const target = targetMinutes();
+    let sumMinutes = 0;
+    let sumDelta = 0;
+
+    const rows = days.map(({ date, minutes, open }) => {
+      const mins = Math.round(minutes);
+      const delta = mins - target;
+      sumMinutes += mins;
+      sumDelta += delta;
+      const live = open ? '<span class="live">● en cours</span>' : '';
+      return `<tr><td>${fmtDay(date)}${live}</td><td><strong>${fmtHM(mins)}</strong></td><td>${fmtDelta(delta)}</td></tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table>
+        <thead><tr><th>Jour</th><th>Heures</th><th>Écart</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td>Total · ${days.length} j</td><td>${fmtHM(sumMinutes)}</td><td>${fmtDelta(sumDelta)}</td></tr></tfoot>
+      </table>`;
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch(`/api/attendance?start=${startInput.value}&end=${endInput.value}`, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+      days = data;
+      render();
+    } catch (err) {
+      wrap.innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
+    }
+  }
+
+  // Objectif mémorisé (facultatif : le stockage peut être indisponible).
+  try { targetInput.value = localStorage.getItem('hoursTarget') || targetInput.value; } catch (e) {}
+
+  const now = new Date();
+  endInput.value = localISO(now);
+  startInput.value = localISO(new Date(now.getFullYear(), now.getMonth(), 1));
+
+  startInput.addEventListener('change', refresh);
+  endInput.addEventListener('change', refresh);
+  targetInput.addEventListener('change', () => {
+    try { localStorage.setItem('hoursTarget', targetInput.value); } catch (e) {}
+    render();
+  });
+  document.getElementById('refreshBtn').addEventListener('click', refresh);
+
+  refresh();
+  setInterval(refresh, 60000);   // le total du jour avance tant que la sortie n'est pas pointée
+</script>
+</body>
+</html>

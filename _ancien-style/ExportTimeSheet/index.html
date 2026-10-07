@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#f2f1f5">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Export TimeSheet</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23f6f3ec%22/><path d=%22M50 56 v-28 M38 40 l12-12 12 12%22 stroke=%22%23e8a33d%22 stroke-width=%227%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 fill=%22none%22/></svg>">
+
+<style>
+  :root {
+    --ink: #2c2c34;
+    --muted: #8a8896;
+    --faint: #b7b5c0;
+    --bg: #f2f1f5;
+    --card: #ffffff;
+    --line: #e8e6ee;
+    --amber: #e8a33d;
+    --amber-deep: #c17f22;
+    --coral: #c1584a;
+    --green: #3f8a5a;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100dvh;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+    padding: 24px 18px 60px;
+  }
+
+  main { width: 100%; max-width: 640px; }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: none;
+    margin-bottom: 16px;
+  }
+  .back-link:hover { color: var(--amber-deep); }
+
+  h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0 0 16px;
+    letter-spacing: -0.01em;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+
+  .controls label.field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 7px 10px;
+  }
+
+  .controls input[type="date"] {
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    color: var(--ink);
+  }
+
+  .option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    margin-bottom: 14px;
+    cursor: pointer;
+  }
+  .option input { accent-color: var(--amber-deep); width: 16px; height: 16px; }
+
+  .notice {
+    font-size: 13px;
+    color: var(--amber-deep);
+    background: #fbf3e2;
+    border: 1px solid #f0dcb0;
+    border-radius: 10px;
+    padding: 9px 12px;
+    margin-bottom: 14px;
+  }
+
+  .list {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 78px 1fr auto;
+    gap: 10px;
+    align-items: baseline;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13.5px;
+  }
+  .row:last-child { border-bottom: none; }
+  .row.pick, .row.head { grid-template-columns: 20px 78px 1fr auto; cursor: pointer; align-items: center; }
+  .row.head { grid-template-columns: 20px 1fr auto; background: #faf9fc; font-size: 13px; font-weight: 600; }
+  .row.pick.skipped { cursor: default; }
+  .row.pick input, .row.head input { accent-color: var(--amber-deep); width: 16px; height: 16px; margin: 0; }
+  .row.pick.off .name, .row.pick.off .hours, .row.pick.off .date { color: var(--faint); font-weight: 400; }
+  .row .date { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .row .name { overflow-wrap: anywhere; }
+  .row .hours { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .row .tag { display: block; font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+  .row.skipped .name, .row.skipped .hours { color: var(--faint); font-weight: 400; }
+  .row.warn .tag { color: var(--coral); }
+
+  .total {
+    padding: 10px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    background: #faf9fc;
+    border-top: 1px solid var(--line);
+  }
+
+  .empty-state {
+    padding: 30px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+
+  .actions button {
+    font: inherit;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+  }
+  .actions button:hover:not(:disabled) { border-color: var(--amber-deep); }
+  .actions button.primary { background: var(--amber); border-color: var(--amber); }
+  .actions button.primary:hover:not(:disabled) { background: var(--amber-deep); color: #fff; }
+  .actions button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .result {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--green);
+    font-size: 14px;
+  }
+  .result.has-errors { border-left-color: var(--coral); }
+  .result.failed { border-left-color: var(--coral); color: var(--coral); }
+  .result button {
+    font: inherit;
+    font-size: 14px;
+    color: var(--amber-deep);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .report { margin-top: 12px; }
+  .report h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 16px 0 6px;
+  }
+  .report h2.err { color: var(--coral); }
+  .report .row { grid-template-columns: 78px 1fr auto; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back-link" href="/">← Accueil</a>
+  <h1>Export TimeSheet</h1>
+
+  <div class="controls">
+    <label class="field">Du <input type="date" id="startDate"></label>
+    <label class="field">au <input type="date" id="endDate"></label>
+  </div>
+
+  <label class="option">
+    <input type="checkbox" id="ignoreNoNumber" checked>
+    Ignorer les tâches sans numéro d'affaire
+  </label>
+
+  <div id="runningNotice" class="notice" hidden>Un timer tourne : son temps n'est pas inclus tant qu'il n'est pas arrêté.</div>
+
+  <div class="list" id="list"></div>
+
+  <div class="actions">
+    <button type="button" id="csvBtn">Exporter en .csv</button>
+    <button type="button" id="odooBtn" class="primary">Exporter vers Odoo</button>
+  </div>
+
+  <div id="resultBox"></div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const startInput = $('startDate');
+  const endInput = $('endDate');
+  const ignoreInput = $('ignoreNoNumber');
+
+  // Nom valide = numéro d'affaire (chiffres) suivi de "_". Même règle que le serveur.
+  const hasJobNumber = (name) => /^\d+_/.test(name.trim());
+
+  let allLines = [];     // toutes les lignes du Timer : {name, date, minutes}
+  const unchecked = new Set();   // clés des lignes décochées (tout est coché par défaut)
+  const lineKey = (l) => `${l.date}|${l.name}`;
+
+  function todayISO() {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 10);
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  function fmtHM(minutes) {
+    const total = Math.round(minutes);
+    return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, '0')}`;
+  }
+
+  const toHours = (minutes) => Math.round((minutes / 60) * 100) / 100;
+
+  function plural(n, one, many) {
+    return `${n} ${n > 1 ? many : one}`;
+  }
+
+  function selectedLines() {
+    const start = startInput.value;
+    const end = endInput.value;
+    return allLines
+      .filter((l) => (!start || l.date >= start) && (!end || l.date <= end))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+  }
+
+  // Une ligne sans numéro n'est pas sélectionnable quand « Ignorer » est coché.
+  const isSelectable = (l) => !(ignoreInput.checked && !hasJobNumber(l.name));
+
+  // Lignes qui seront réellement envoyées (export Odoo et CSV) : sélectionnables ET cochées.
+  function linesToExport() {
+    return selectedLines().filter((l) => isSelectable(l) && !unchecked.has(lineKey(l)));
+  }
+
+  function render() {
+    const lines = selectedLines();
+    const list = $('list');
+    if (!lines.length) {
+      list.innerHTML = '<div class="empty-state">Aucune heure enregistrée sur cette période.</div>';
+    } else {
+      const exported = linesToExport();
+      const selectable = lines.filter(isSelectable);
+      const totalMin = exported.reduce((s, l) => s + l.minutes, 0);
+
+      const head = `<label class="row head"><input type="checkbox" id="checkAll"><span>Tout sélectionner</span><span>${exported.length}/${selectable.length}</span></label>`;
+      const rows = lines.map((l) => {
+        const selectableLine = isSelectable(l);
+        const checked = selectableLine && !unchecked.has(lineKey(l));
+        const noNumber = !hasJobNumber(l.name);
+        const cls = [selectableLine ? '' : 'skipped', checked ? '' : 'off', noNumber && selectableLine ? 'warn' : ''].join(' ');
+        const tag = noNumber ? `<span class="tag">${selectableLine ? 'erreur : sans numéro' : 'ignorée : sans numéro'}</span>` : '';
+        return `<label class="row pick ${cls}"><input type="checkbox" data-key="${esc(lineKey(l))}" ${checked ? 'checked' : ''} ${selectableLine ? '' : 'disabled'}><span class="date">${esc(l.date)}</span><span class="name">${esc(l.name)}${tag}</span><span class="hours">${fmtHM(l.minutes)}</span></label>`;
+      }).join('');
+      list.innerHTML = head + rows + `<div class="total">${plural(exported.length, 'ligne', 'lignes')} à exporter · ${fmtHM(totalMin)}</div>`;
+
+      const all = $('checkAll');
+      all.checked = selectable.length > 0 && exported.length === selectable.length;
+      all.indeterminate = exported.length > 0 && exported.length < selectable.length;
+      all.disabled = selectable.length === 0;
+    }
+    const nothing = linesToExport().length === 0;
+    $('csvBtn').disabled = nothing;
+    $('odooBtn').disabled = nothing;
+  }
+
+  // Cases à cocher : délégation sur la liste (elle est re-rendue à chaque changement).
+  $('list').addEventListener('change', (e) => {
+    if (e.target.id === 'checkAll') {
+      for (const l of selectedLines().filter(isSelectable)) {
+        if (e.target.checked) unchecked.delete(lineKey(l));
+        else unchecked.add(lineKey(l));
+      }
+    } else if (e.target.dataset.key) {
+      if (e.target.checked) unchecked.delete(e.target.dataset.key);
+      else unchecked.add(e.target.dataset.key);
+    }
+    render();
+  });
+
+  async function load() {
+    const res = await fetch('/api/timer/state', { cache: 'no-store' });
+    const state = await res.json();
+    allLines = state.projects.flatMap((p) => p.history.map((h) => ({ name: p.name, date: h.date, minutes: h.minutes })));
+    $('runningNotice').hidden = !state.running;
+    render();
+  }
+
+  // ---------- CSV ----------
+  const csvCell = (v) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+
+  function exportCsv() {
+    const rows = [['date', "numéro d'affaire", 'projet', 'heures']];
+    for (const l of linesToExport()) {
+      const match = l.name.trim().match(/^(\d+)_/);
+      const number = match ? match[1] : '';
+      rows.push([l.date, number, l.name, String(toHours(l.minutes))]);
+    }
+    const text = '﻿' + rows.map((r) => r.map(csvCell).join(';')).join('\r\n') + '\r\n';
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `timesheet_${startInput.value || 'debut'}_${endInput.value || 'fin'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ---------- Odoo ----------
+  function reportRows(items, withReason) {
+    return items.map((i) => {
+      const sub = withReason ? i.reason : (i.project ? `→ ${i.project}` : '');
+      return `<div class="row"><span class="date">${esc(i.date)}</span><span class="name">${esc(i.name)}${sub ? `<span class="tag">${esc(sub)}</span>` : ''}</span><span class="hours">${fmtHM(i.hours * 60)}</span></div>`;
+    }).join('');
+  }
+
+  function showReport(report) {
+    const { imported, errors, ignored } = report;
+    const box = $('resultBox');
+    const summary = `${plural(imported.length, 'tâche importée', 'tâches importées')}, ${plural(errors.length, 'erreur', 'erreurs')}.`;
+
+    let sections = '';
+    if (errors.length) sections += `<h2 class="err">Erreurs (${errors.length})</h2><div class="list">${reportRows(errors, true)}</div>`;
+    if (imported.length) sections += `<h2>Importées (${imported.length})</h2><div class="list">${reportRows(imported, false)}</div>`;
+    if (ignored.length) sections += `<h2>Ignorées (${ignored.length})</h2><div class="list">${reportRows(ignored, true)}</div>`;
+
+    box.innerHTML = `
+      <div class="result ${errors.length ? 'has-errors' : ''}">
+        ${esc(summary)} <button type="button" id="toggleReport">Voir le rapport</button>
+        <div class="report" id="reportBody" hidden>${sections || '<div class="empty-state">Rien à signaler.</div>'}</div>
+      </div>`;
+    $('toggleReport').addEventListener('click', () => {
+      const body = $('reportBody');
+      body.hidden = !body.hidden;
+      $('toggleReport').textContent = body.hidden ? 'Voir le rapport' : 'Masquer le rapport';
+    });
+  }
+
+  async function exportToOdoo() {
+    const btn = $('odooBtn');
+    const entries = linesToExport().map((l) => ({ name: l.name, date: l.date, hours: toHours(l.minutes) }));
+    btn.disabled = true;
+    btn.textContent = 'Envoi en cours…';
+    $('resultBox').innerHTML = '';
+    try {
+      const res = await fetch('/api/export/odoo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries, ignore_no_number: ignoreInput.checked }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+      showReport(data);
+    } catch (err) {
+      $('resultBox').innerHTML = `<div class="result failed">Export interrompu : ${esc(err.message)}</div>`;
+    } finally {
+      btn.textContent = 'Exporter vers Odoo';
+      render();
+    }
+  }
+
+  startInput.value = todayISO();
+  endInput.value = todayISO();
+  startInput.addEventListener('change', render);
+  endInput.addEventListener('change', render);
+  ignoreInput.addEventListener('change', render);
+  $('csvBtn').addEventListener('click', exportCsv);
+  $('odooBtn').addEventListener('click', exportToOdoo);
+  load();
+</script>
+</body>
+</html>

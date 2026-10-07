@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#f6f4f1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Timer</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23f6f4f1%22/><circle cx=%2250%22 cy=%2254%22 r=%2228%22 fill=%22none%22 stroke=%22%237b7b7b%22 stroke-width=%228%22/><path d=%22M45 20 h10 M50 20 v10%22 stroke=%22%237b7b7b%22 stroke-width=%227%22 stroke-linecap=%22round%22/><path d=%22M44 46 l14 8-14 8z%22 fill=%22%2303fc52%22/></svg>">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500&display=swap">
+
+<style>
+  /* Style "Financial Web App" (Dribbble) : plat, sans dégradé ni ombre.
+     Police Prompt. Palette : #7b7b7b (ex #000000), #03fc52 (ex #ea4242), #f6f4f1, #ffffff */
+  :root {
+    --ink: #7b7b7b;
+    --accent: #03fc52;
+    --bg: #f6f4f1;
+    --card: #ffffff;
+    --line: 1px solid var(--ink);
+    --font: 'Prompt', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font);
+    min-height: 100dvh;
+  }
+
+  body {
+    display: flex;
+    justify-content: center;
+    padding: 24px 18px 60px;
+  }
+
+  main { width: 100%; max-width: 640px; }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ink);
+    text-decoration: none;
+    margin-bottom: 16px;
+  }
+  .back-link:hover { color: var(--accent); }
+
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2px;
+  }
+
+  h1 { font-size: 28px; font-weight: 500; margin: 0; }
+
+  .icon-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: var(--ink);
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  .today-total { font-size: 13px; margin: 4px 0 24px; }
+  .today-total strong { font-weight: 500; }
+
+  /* --- En cours --- */
+  .running-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border-radius: 20px;
+    background: var(--accent);
+    color: var(--ink);
+    margin-bottom: 16px;
+  }
+  .running-card.empty {
+    background: transparent;
+    color: var(--ink);
+    border: var(--line);
+    font-size: 13px;
+    justify-content: center;
+    padding: 18px;
+  }
+
+  .running-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--ink);
+    flex-shrink: 0;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
+
+  .running-info { flex: 1; min-width: 0; }
+  .running-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.85; margin: 0 0 3px; }
+  .running-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .running-time {
+    font-variant-numeric: tabular-nums;
+    font-size: 20px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+
+  .stop-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+    border: none;
+    background: #fff;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .stop-btn svg { width: 13px; height: 13px; }
+
+  /* --- Saisie --- */
+  .input-wrap { position: relative; margin-bottom: 28px; }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border: var(--line);
+    border-radius: 16px;
+    padding: 6px 6px 6px 16px;
+  }
+  .input-row:focus-within { border-color: var(--accent); }
+
+  .input-row input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 15px;
+    font-family: inherit;
+    color: var(--ink);
+    padding: 10px 0;
+  }
+  .input-row input::placeholder { color: var(--ink); opacity: 0.7; }
+
+  .start-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    border: none;
+    background: var(--accent);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .start-btn:disabled { opacity: 0.4; cursor: default; }
+  .start-btn svg { width: 14px; height: 14px; }
+
+  .suggestions {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: var(--card);
+    border: var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    z-index: 5;
+    display: none;
+  }
+  .suggestions.open { display: block; }
+
+  .suggestion {
+    padding: 11px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .suggestion:hover, .suggestion.active { background: var(--bg); }
+  .suggestion + .suggestion { border-top: var(--line); }
+  .suggestion .s-time { font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .suggestion.create { color: var(--accent); font-weight: 500; }
+
+  /* --- Projets --- */
+  .section-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0 0 10px 4px;
+  }
+
+  .project-list { display: flex; flex-direction: column; gap: 10px; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: var(--line);
+    border-radius: 16px;
+    padding: 12px 14px;
+  }
+  .row.running { border-color: var(--accent); }
+
+  .play-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    border: var(--line);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+    color: var(--ink);
+  }
+  .play-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .play-btn svg { width: 12px; height: 12px; }
+  .row.running .play-btn { background: var(--accent); border-color: var(--accent); color: var(--ink); }
+
+  .row .name {
+    flex: 1;
+    min-width: 0;
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .row .today-time {
+    font-size: 13px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    min-width: 44px;
+    text-align: right;
+  }
+  .row.running .today-time { color: var(--accent); font-weight: 500; }
+
+  .row .date {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .row .date svg { width: 15px; height: 15px; }
+
+  .empty-list { text-align: center; font-size: 13px; padding: 30px 0; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back-link" href="/">← Accueil</a>
+
+  <div class="title-row">
+    <h1>Timer</h1>
+    <a class="icon-btn" href="/report" title="Report">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <path d="M5 19V11 M12 19V5 M19 19v-7"/>
+      </svg>
+    </a>
+  </div>
+  <p class="today-total">Aujourd'hui : <strong id="todayTotal">0m</strong></p>
+
+  <div id="runningCard"></div>
+
+  <div class="input-wrap">
+    <div class="input-row">
+      <input type="text" id="projectInput" placeholder="Sur quoi travailles-tu ?" autocomplete="off">
+      <button class="start-btn" id="startBtn" disabled title="Démarrer">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8z"/></svg>
+      </button>
+    </div>
+    <div class="suggestions" id="suggestions"></div>
+  </div>
+
+  <p class="section-label">Projets</p>
+  <div class="project-list" id="projectList"></div>
+</main>
+
+<script>
+  // --- État (chargé depuis le backend : Timer/timer_store.py + Timer/timer.db) ---
+  // `history` garde le temps par jour travaillé : [{date, minutes}, ...] trié du plus ancien au plus récent.
+  // La ligne du projet n'affiche QUE la dernière entrée (dernier jour travaillé) ; le total (tri "plus utilisé")
+  // additionne tout l'historique.
+  let projects = [];
+  let runningId = null;    // id (number) du projet en cours, ou null
+  let runningSince = null; // équivalent Date.now() du started_at renvoyé par le serveur
+  let activeSuggestionIndex = -1;
+
+  const todayISO = () => new Date().toISOString().slice(0, 10);
+
+  function fmt(mins) {
+    mins = Math.round(mins);
+    if (mins <= 0) return '-';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  function fmtClock(mins) {
+    const totalSeconds = Math.round(mins * 60);
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    const [y, m, d] = iso.split('-').map(Number);
+    return `${d}/${m}`;
+  }
+
+  function lastEntry(p) {
+    return p.history.length ? p.history[p.history.length - 1] : null;
+  }
+
+  // Minutes à afficher sur la ligne : celles du DERNIER jour travaillé uniquement
+  // (+ le direct en cours si ce projet tourne).
+  function rowMinutes(p) {
+    const entry = lastEntry(p);
+    let mins = entry ? entry.minutes : 0;
+    if (p.id === runningId) mins += (Date.now() - runningSince) / 60000;
+    return mins;
+  }
+
+  function rowDate(p) {
+    const entry = lastEntry(p);
+    if (entry) return entry.date;
+    // Projet flambant neuf, en cours de chronométrage, pas encore d'entrée d'historique
+    // (elle n'est créée qu'à l'arrêt) -> on l'affiche/trie comme "aujourd'hui".
+    return p.id === runningId ? todayISO() : null;
+  }
+
+  function totalMinutes(p) {
+    const base = p.history.reduce((sum, h) => sum + h.minutes, 0);
+    return p.id === runningId ? base + (Date.now() - runningSince) / 60000 : base;
+  }
+
+  function totalTodayAll() {
+    const today = todayISO();
+    return projects.reduce((sum, p) => {
+      const entry = p.history.find((h) => h.date === today);
+      let mins = entry ? entry.minutes : 0;
+      if (p.id === runningId) mins += (Date.now() - runningSince) / 60000;
+      return sum + mins;
+    }, 0);
+  }
+
+  function sortedProjects() {
+    return [...projects].sort((a, b) => {
+      const da = rowDate(a) || '';
+      const db = rowDate(b) || '';
+      if (da !== db) return da < db ? 1 : -1;
+      return totalMinutes(b) - totalMinutes(a);
+    });
+  }
+
+  function applyState(state) {
+    projects = state.projects;
+    if (state.running) {
+      runningId = state.running.projectId;
+      runningSince = state.running.startedAt * 1000;
+    } else {
+      runningId = null;
+      runningSince = null;
+    }
+  }
+
+  async function loadState() {
+    const res = await fetch('/api/timer/state', { cache: 'no-store' });
+    applyState(await res.json());
+    render();
+  }
+
+  async function startProject(name) {
+    name = name.trim();
+    if (!name) return;
+
+    projectInput.value = '';
+    closeSuggestions();
+
+    const res = await fetch('/api/timer/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    applyState(await res.json());
+    render();
+  }
+
+  async function stopRunning() {
+    const res = await fetch('/api/timer/stop', { method: 'POST' });
+    applyState(await res.json());
+    render();
+  }
+
+  function toggleProject(id) {
+    if (runningId === id) {
+      stopRunning();
+    } else {
+      const p = projects.find((x) => x.id === id);
+      if (p) startProject(p.name);
+    }
+  }
+
+  // --- Rendu ---
+  const runningCardEl = document.getElementById('runningCard');
+  const projectListEl = document.getElementById('projectList');
+  const todayTotalEl = document.getElementById('todayTotal');
+  const projectInput = document.getElementById('projectInput');
+  const startBtn = document.getElementById('startBtn');
+  const suggestionsEl = document.getElementById('suggestions');
+
+  function render() {
+    todayTotalEl.textContent = fmt(totalTodayAll());
+
+    if (runningId != null) {
+      const p = projects.find((x) => x.id === runningId);
+      const mins = rowMinutes(p);
+      runningCardEl.innerHTML = `
+        <div class="running-card">
+          <span class="running-dot"></span>
+          <div class="running-info">
+            <p class="running-label">En cours</p>
+            <p class="running-name">${escapeHtml(p.name)}</p>
+          </div>
+          <div class="running-time">${fmtClock(mins)}</div>
+          <button class="stop-btn" id="stopBtn" title="Arrêter">
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
+          </button>
+        </div>`;
+      document.getElementById('stopBtn').addEventListener('click', stopRunning);
+    } else {
+      runningCardEl.innerHTML = `<div class="running-card empty">Aucun chronométrage en cours</div>`;
+    }
+
+    const list = sortedProjects();
+    if (list.length === 0) {
+      projectListEl.innerHTML = `<p class="empty-list">Aucun projet pour l'instant.</p>`;
+      return;
+    }
+
+    projectListEl.innerHTML = list.map((p) => {
+      const isRunning = p.id === runningId;
+      const icon = isRunning
+        ? `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`
+        : `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8z"/></svg>`;
+      return `
+        <div class="row ${isRunning ? 'running' : ''}" data-id="${p.id}">
+          <button class="play-btn" title="${isRunning ? 'Arrêter' : 'Démarrer'}">${icon}</button>
+          <span class="name">${escapeHtml(p.name)}</span>
+          <span class="today-time">${fmt(rowMinutes(p))}</span>
+          <span class="date">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="5" width="18" height="16" rx="3"/>
+              <path d="M3 9h18 M8 3v4 M16 3v4"/>
+            </svg>
+            ${fmtDate(rowDate(p))}
+          </span>
+        </div>`;
+    }).join('');
+
+    projectListEl.querySelectorAll('.row').forEach((row) => {
+      row.querySelector('.play-btn').addEventListener('click', () => toggleProject(Number(row.dataset.id)));
+    });
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // --- Saisie + autocomplétion ---
+  function closeSuggestions() {
+    suggestionsEl.classList.remove('open');
+    suggestionsEl.innerHTML = '';
+    activeSuggestionIndex = -1;
+  }
+
+  function updateSuggestions() {
+    const q = projectInput.value.trim().toLowerCase();
+    startBtn.disabled = q.length === 0;
+
+    if (!q) { closeSuggestions(); return; }
+
+    const matches = projects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5);
+    const exact = projects.some((p) => p.name.toLowerCase() === q);
+
+    let html = matches.map((p) => `
+      <div class="suggestion" data-name="${escapeHtml(p.name)}">
+        <span>${escapeHtml(p.name)}</span>
+        <span class="s-time">${fmt(totalMinutes(p))}</span>
+      </div>`).join('');
+
+    if (!exact) {
+      html += `<div class="suggestion create" data-name="${escapeHtml(projectInput.value.trim())}">+ Créer « ${escapeHtml(projectInput.value.trim())} »</div>`;
+    }
+
+    suggestionsEl.innerHTML = html;
+    suggestionsEl.classList.add('open');
+    activeSuggestionIndex = -1;
+
+    suggestionsEl.querySelectorAll('.suggestion').forEach((el) => {
+      el.addEventListener('click', () => startProject(el.dataset.name));
+    });
+  }
+
+  projectInput.addEventListener('input', updateSuggestions);
+  projectInput.addEventListener('focus', updateSuggestions);
+  projectInput.addEventListener('keydown', (e) => {
+    const items = Array.from(suggestionsEl.querySelectorAll('.suggestion'));
+    if (e.key === 'ArrowDown' && items.length) {
+      e.preventDefault();
+      activeSuggestionIndex = Math.min(activeSuggestionIndex + 1, items.length - 1);
+      items.forEach((el, i) => el.classList.toggle('active', i === activeSuggestionIndex));
+    } else if (e.key === 'ArrowUp' && items.length) {
+      e.preventDefault();
+      activeSuggestionIndex = Math.max(activeSuggestionIndex - 1, 0);
+      items.forEach((el, i) => el.classList.toggle('active', i === activeSuggestionIndex));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (activeSuggestionIndex >= 0 && items[activeSuggestionIndex]) {
+        startProject(items[activeSuggestionIndex].dataset.name);
+      } else if (projectInput.value.trim()) {
+        startProject(projectInput.value.trim());
+      }
+    } else if (e.key === 'Escape') {
+      closeSuggestions();
+    }
+  });
+
+  startBtn.addEventListener('click', () => {
+    if (projectInput.value.trim()) startProject(projectInput.value.trim());
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.input-wrap')) closeSuggestions();
+  });
+
+  loadState();
+  setInterval(render, 1000);
+</script>
+</body>
+</html>

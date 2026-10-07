@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Report</title>
+  <style>
+    :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+    body { margin: 0; padding: 24px; color: var(--text-color, #1e293b); background: var(--bg-color, #f8fafc); }
+    header { display:flex; gap:16px; align-items:center; justify-content:space-between; flex-wrap:wrap; margin-bottom:20px; }
+    h1 { margin:0; font-size: 24px; }
+    .controls { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+    label { font-size:14px; display:flex; gap:6px; align-items:center; }
+    input, button { font:inherit; padding:7px 10px; border-radius:6px; border:1px solid var(--divider-color, #cbd5e1); background:var(--card-bg, white); color:inherit; }
+    button { cursor:pointer; background:var(--primary, #2563eb); color:white; border:0; font-weight:600; }
+    .table-wrap { overflow:auto; background:var(--card-bg, white); border-radius:10px; box-shadow: var(--whiteframe-shadow-2dp, 0 1px 3px #0002); }
+    table { border-collapse:collapse; width:100%; min-width:720px; }
+    th, td { padding:11px 12px; border-bottom:1px solid var(--divider-color, #e2e8f0); text-align:right; white-space:nowrap; }
+    th:first-child, td:first-child { position:sticky; left:0; text-align:left; background:var(--card-bg, white); z-index:1; }
+    th { font-size:12px; opacity:.75; }
+    tfoot td { font-weight:700; border-top:2px solid var(--divider-color, #cbd5e1); }
+    .empty, .error { padding:28px; text-align:center; opacity:.75; }
+    .error { color:#b91c1c; }
+    .cell, .day-link { cursor:pointer; }
+    .cell:hover, .day-link:hover { background: color-mix(in srgb, var(--primary, #2563eb) 12%, transparent); }
+    .day-link { font-weight:600; }
+    dialog { border:0; border-radius:12px; box-shadow:0 15px 50px #0005; color:inherit; background:var(--card-bg, white); max-width:540px; }
+    dialog::backdrop { background:#0006; }
+    .task-list { padding-left:20px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Report</h1>
+    <div class="controls">
+      <label>Du <input id="start-date" type="date"></label>
+      <label>au <input id="end-date" type="date"></label>
+      <label><input id="include-inbox" type="checkbox"> Inclure Inbox</label>
+      <button id="refresh" type="button">Actualiser</button>
+    </div>
+  </header>
+  <main>
+    <div class="table-wrap" id="report"><p class="empty">Chargement du rapport…</p></div>
+  </main>
+  <dialog id="details"><div id="detail-content"></div><form method="dialog"><button>Fermer</button></form></dialog>
+  <script>
+function buildDailyProjectReport({
+  projects = [],
+  tasks = [],
+  startDate,
+  endDate,
+  includeInbox = false,
+}) {
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const cells = {};
+  const projectTotals = {};
+  const dayTotals = {};
+  let grandTotal = 0;
+
+  for (const task of tasks) {
+    if (!task || (!includeInbox && task.projectId === 'INBOX_PROJECT')) {
+      continue;
+    }
+
+    const project = projectById.get(task.projectId);
+    if (!project) {
+      continue;
+    }
+
+    for (const [day, duration] of Object.entries(task.timeSpentOnDay || {})) {
+      if ((startDate && day < startDate) || (endDate && day > endDate)) {
+        continue;
+      }
+      if (!Number.isFinite(duration) || duration <= 0) {
+        continue;
+      }
+
+      cells[day] ||= {};
+      cells[day][task.projectId] = (cells[day][task.projectId] || 0) + duration;
+      projectTotals[task.projectId] = (projectTotals[task.projectId] || 0) + duration;
+      dayTotals[day] = (dayTotals[day] || 0) + duration;
+      grandTotal += duration;
+    }
+  }
+
+  return {
+    days: Object.keys(cells).sort(),
+    cells,
+    dayTotals,
+    projectTotals,
+    grandTotal,
+    projects: projects.filter((project) => includeInbox || project.id !== 'INBOX_PROJECT'),
+  };
+}
+
+function formatDuration(milliseconds) {
+  const totalMinutes = Math.round((milliseconds || 0) / 60_000);
+  return `${Math.floor(totalMinutes / 60)} h ${String(totalMinutes % 60).padStart(2, '0')}`;
+}
+
+
+  </script>
+  <script>
+    const $ = (selector) => document.querySelector(selector);
+    const today = new Date();
+    const dateText = (value) => value.toISOString().slice(0, 10);
+    $('#end-date').value = dateText(today);
+    $('#start-date').value = dateText(new Date(today.getFullYear(), today.getMonth(), 1));
+
+    let allTasks = [];
+    let allProjects = [];
+    let currentReport = null;
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, (character) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#039;', '"':'&quot;' }[character]));
+    }
+
+    function taskDetails(day, projectId) {
+      return allTasks.filter((task) => task.projectId === projectId && Number(task.timeSpentOnDay?.[day]) > 0)
+        .map((task) => ({ title: task.title || 'Sans titre', duration: task.timeSpentOnDay[day], done: task.isDone }));
+    }
+
+    function showDetails(day, project) {
+      const rows = taskDetails(day, project.id);
+      $('#detail-content').innerHTML = `<h2>${escapeHtml(project.title)} — ${escapeHtml(day)}</h2><ul class="task-list">${rows.map((row) => `<li>${escapeHtml(row.title)}${row.done ? ' <small>(terminée)</small>' : ''} : <strong>${formatDuration(row.duration)}</strong></li>`).join('') || '<li>Aucune tâche</li>'}</ul>`;
+      $('#details').showModal();
+    }
+
+    function showDayView(day) {
+      const projectRows = allProjects
+        .map((project) => ({ project, duration: currentReport.cells[day]?.[project.id] || 0 }))
+        .filter(({ duration }) => duration > 0);
+      const rows = projectRows.map(({ project, duration }) =>
+        `<tr><td class="cell" data-day="${day}" data-project="${escapeHtml(project.id)}">${escapeHtml(project.title)}</td><td><strong>${formatDuration(duration)}</strong></td></tr>`
+      ).join('');
+      $('#report').innerHTML = `<table><thead><tr><th>Jour</th><th>Total</th></tr></thead><tbody><tr><td>${escapeHtml(day)}</td><td><strong>${formatDuration(currentReport.dayTotals[day])}</strong></td></tr></tbody></table><table><thead><tr><th>Projet</th><th>Temps</th></tr></thead><tbody>${rows}</tbody></table><p><button id="back-to-report" type="button">Retour au rapport</button></p>`;
+      $('#back-to-report').addEventListener('click', () => render(currentReport));
+      document.querySelectorAll('.cell[data-project]').forEach((cell) => cell.addEventListener('click', () => {
+        const project = allProjects.find((item) => item.id === cell.dataset.project);
+        if (project) showDetails(cell.dataset.day, project);
+      }));
+    }
+
+    function render(report) {
+      currentReport = report;
+      const visibleProjects = report.projects.filter((project) => report.projectTotals[project.id]);
+      if (!report.days.length) {
+        $('#report').innerHTML = '<p class="empty">Aucun temps enregistré pour cette période.</p>';
+        return;
+      }
+      const header = visibleProjects.map((project) => `<th>${escapeHtml(project.title)}</th>`).join('');
+      const rows = report.days.map((day) => `<tr><td class="day-link" data-day="${day}">${escapeHtml(day)}</td><td><strong>${formatDuration(report.dayTotals[day])}</strong></td>${visibleProjects.map((project) => {
+        const duration = report.cells[day][project.id] || 0;
+        return `<td>${duration ? formatDuration(duration) : '—'}</td>`;
+      }).join('')}</tr>`).join('');
+      const footer = visibleProjects.map((project) => `<td>${formatDuration(report.projectTotals[project.id] || 0)}</td>`).join('');
+      $('#report').innerHTML = `<table><thead><tr><th>Jour</th><th>Total</th>${header}</tr></thead><tbody>${rows}</tbody><tfoot><tr><td>Total</td><td>${formatDuration(report.grandTotal)}</td>${footer}</tr></tfoot></table>`;
+      document.querySelectorAll('.day-link[data-day]').forEach((cell) => cell.addEventListener('click', () => showDayView(cell.dataset.day)));
+    }
+
+    async function refresh() {
+      $('#report').innerHTML = '<p class="empty">Actualisation…</p>';
+      try {
+        const [activeTasks, archivedTasks, projects] = await Promise.all([
+          PluginAPI.getTasks(), PluginAPI.getArchivedTasks(), PluginAPI.getAllProjects(),
+        ]);
+        const taskById = new Map();
+        [...activeTasks, ...archivedTasks].forEach((task) => taskById.set(task.id, task));
+        allTasks = [...taskById.values()];
+        allProjects = projects;
+        render(buildDailyProjectReport({
+          tasks: allTasks,
+          projects: allProjects,
+          startDate: $('#start-date').value,
+          endDate: $('#end-date').value,
+          includeInbox: $('#include-inbox').checked,
+        }));
+      } catch (error) {
+        console.error(error);
+        $('#report').innerHTML = `<p class="error">Impossible de charger le rapport : ${escapeHtml(error.message || error)}</p>`;
+      }
+    }
+    $('#refresh').addEventListener('click', refresh);
+    $('#start-date').addEventListener('change', refresh);
+    $('#end-date').addEventListener('change', refresh);
+    $('#include-inbox').addEventListener('change', refresh);
+    refresh();
+  </script>
+</body>
+</html>

@@ -1,0 +1,18 @@
+.gradle/
+build/
+**/build/
+local.properties
+.idea/
+*.iml
+*.log
+*.env
+
+
+# Python
+__pycache__/
+*.pyc
+
+# Données locales / secrets
+*.db
+.env*
+!.env.example

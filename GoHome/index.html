@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#f6f3ec">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>GoHome</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23f6f3ec%22/><circle cx=%2250%22 cy=%2250%22 r=%2226%22 fill=%22none%22 stroke=%22%232a2620%22 stroke-width=%228%22/><line x1=%2250%22 y1=%2250%22 x2=%2250%22 y2=%2230%22 stroke=%22%23ecab0f%22 stroke-width=%228%22 stroke-linecap=%22round%22/></svg>">
+
+<link rel="stylesheet" href="../shared/style.css">
+<style>
+  :root {
+    --main-width: 380px;
+  }
+
+  body {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--ink);
+    text-decoration: none;
+    margin-bottom: 14px;
+  }
+
+  .eyebrow {
+    font-family: var(--font);
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    color: var(--ink);
+    margin: 0 0 4px 2px;
+  }
+
+  h1 {
+    color: var(--title);
+    font-size: 28px;
+    font-weight: 500;
+    margin: 0 0 22px 2px;
+    letter-spacing: -0.01em;
+  }
+
+  .field {
+    margin-bottom: 18px;
+  }
+
+  label {
+    display: block;
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--ink);
+    margin-bottom: 6px;
+    margin-left: 2px;
+  }
+
+  input[type="time"],
+  input[type="number"],
+  input[type="text"],
+  input[type="password"] {
+    width: 100%;
+    font-family: var(--font);
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #ffffff;
+    color: var(--ink);
+    outline: none;
+    transition: border-color 0.15s ease;
+  }
+
+  input[type="time"] { font-size: 22px; }
+
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+  }
+
+  input:focus { border-color: var(--accent); }
+
+  .row { display: flex; gap: 12px; }
+
+  .row .field { flex: 1; }
+
+  .result {
+    margin-top: 22px;
+    padding: 26px 22px;
+    border-radius: 20px;
+    background: #ffffff;
+    border: 1px solid var(--accent);
+    color: var(--ink);
+    text-align: center;
+  }
+
+  .result .tag {
+    font-family: var(--font);
+    font-size: 12px;
+    color: var(--ink);
+    margin-bottom: 10px;
+  }
+
+  .result .time {
+    font-size: 54px;
+    font-weight: 500;
+    color: var(--accent);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .result .sub {
+    font-family: var(--font);
+    font-size: 13px;
+    color: var(--ink);
+    margin-top: 10px;
+  }
+
+  .result.done .time { color: var(--accent); }
+
+  .odoo-btn {
+    width: 100%;
+    margin-top: 22px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #ffffff;
+    color: var(--ink);
+    font-family: var(--font);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .odoo-btn:active { background: #ffffff; }
+
+  .odoo-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .odoo-status {
+    margin-top: 10px;
+    font-family: var(--font);
+    font-size: 13px;
+    text-align: center;
+    color: var(--ink);
+    min-height: 16px;
+  }
+
+  .odoo-status.err { color: var(--accent); }
+
+  .odoo-status.ok { color: var(--accent); }
+
+  footer {
+    text-align: center;
+    margin-top: 18px;
+    font-family: var(--font);
+    font-size: 12px;
+    color: var(--ink);
+  }
+</style>
+</head>
+<body>
+<main>
+  <a class="back-link" href="/">← Accueil</a>
+  <p class="eyebrow">Suivi du temps</p>
+  <h1>GoHome</h1>
+
+  <div class="field">
+    <label for="arrivee">Heure d'arrivée</label>
+    <input type="time" id="arrivee" value="07:00">
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label for="heures">Heures visées</label>
+      <input type="number" id="heures" min="0" max="24" step="0.25" value="8">
+    </div>
+    <div class="field">
+      <label for="pause">Pause (min)</label>
+      <input type="number" id="pause" min="0" max="240" step="5" value="30">
+    </div>
+  </div>
+
+  <div class="result" id="result">
+    <p class="tag">Sortie prévue à</p>
+    <p class="time" id="sortie">15:00</p>
+    <p class="sub" id="sub">8h de travail depuis 07:00</p>
+  </div>
+
+  <button class="odoo-btn" id="fetchOdoo">⟳ Récupérer depuis Odoo</button>
+  <p class="odoo-status" id="odooStatus"></p>
+
+  <footer>Heure d'arrivée + durée + pause = heure de sortie</footer>
+</main>
+
+<script>
+  const arriveeEl = document.getElementById('arrivee');
+  const heuresEl = document.getElementById('heures');
+  const pauseEl = document.getElementById('pause');
+  const sortieEl = document.getElementById('sortie');
+  const subEl = document.getElementById('sub');
+  const resultEl = document.getElementById('result');
+  const odooStatus = document.getElementById('odooStatus');
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function calc() {
+    const [h, m] = arriveeEl.value.split(':').map(Number);
+    if (isNaN(h)) return;
+
+    const heures = parseFloat(heuresEl.value) || 0;
+    const pause = parseFloat(pauseEl.value) || 0;
+
+    const startMinutes = h * 60 + m;
+    const totalMinutes = startMinutes + Math.round(heures * 60) + pause;
+
+    const exitH = Math.floor((totalMinutes / 60) % 24);
+    const exitM = totalMinutes % 60;
+
+    sortieEl.textContent = `${pad(exitH)}:${pad(exitM)}`;
+
+    let subText = `${heures}h de travail depuis ${arriveeEl.value}`;
+    if (pause > 0) subText += ` (+ ${pause} min de pause)`;
+    subEl.textContent = subText;
+
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    resultEl.classList.toggle('done', nowMinutes >= totalMinutes);
+  }
+
+  [arriveeEl, heuresEl, pauseEl].forEach(el => el.addEventListener('input', calc));
+  calc();
+
+  // --- Odoo fetch (via le serveur local, voir server.py) ---
+
+  async function fetchOdoo() {
+    const btn = document.getElementById('fetchOdoo');
+    btn.disabled = true;
+    odooStatus.textContent = 'Récupération…';
+    odooStatus.className = 'odoo-status';
+
+    try {
+      const res = await fetch('/api/pointages', { cache: 'no-store' });
+      const records = await res.json();
+
+      if (!res.ok) {
+        throw new Error(records.error || `HTTP ${res.status}`);
+      }
+
+      if (!records || records.length === 0) {
+        odooStatus.textContent = 'Aucun pointage trouvé aujourd\'hui.';
+        odooStatus.className = 'odoo-status err';
+        btn.disabled = false;
+        return;
+      }
+
+      // Odoo datetimes come back as "YYYY-MM-DD HH:MM:SS" in UTC
+      const toLocalDate = (s) => new Date(s.replace(' ', 'T') + 'Z');
+
+      const first = toLocalDate(records[0].check_in);
+      arriveeEl.value = `${pad(first.getHours())}:${pad(first.getMinutes())}`;
+
+      // sum gaps between consecutive check_out -> next check_in as breaks,
+      // en ignorant les coupures courtes (téléphone, etc.) sous ce seuil
+      const MIN_PAUSE_MINUTES = 20;
+      let pauseMinutes = 0;
+      for (let i = 0; i < records.length - 1; i++) {
+        if (records[i].check_out) {
+          const out = toLocalDate(records[i].check_out);
+          const nextIn = toLocalDate(records[i + 1].check_in);
+          const gap = Math.max(0, Math.round((nextIn - out) / 60000));
+          if (gap >= MIN_PAUSE_MINUTES) pauseMinutes += gap;
+        }
+      }
+
+      // Si une vraie pause est pointée, elle remplace la pause manuelle.
+      // Sinon (aucune coupure ≥ 20 min), on garde la valeur déjà saisie.
+      if (pauseMinutes > 0) pauseEl.value = pauseMinutes;
+
+      calc();
+
+      const openInterval = !records[records.length - 1].check_out;
+      const pauseText = pauseMinutes > 0 ? `${pauseMinutes} min de pause` : `pause manuelle conservée (${pauseEl.value} min)`;
+      odooStatus.textContent = `Arrivée à ${arriveeEl.value}, ${pauseText}` + (openInterval ? ' (session en cours)' : '');
+      odooStatus.className = 'odoo-status ok';
+    } catch (err) {
+      odooStatus.textContent = `Échec (${err.message}).`;
+      odooStatus.className = 'odoo-status err';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  document.getElementById('fetchOdoo').addEventListener('click', fetchOdoo);
+
+  // Appel automatique au chargement de la page
+  fetchOdoo();
+</script>
+</body>
+</html>

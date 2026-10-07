@@ -1,0 +1,6 @@
+date,project,duration,notes
+2026-09-01,99001_TEST_Alpha_Genève,1:30,réunion
+2026-09-01,99001_TEST_Alpha_Genève,0:30,suite
+2026-09-01,99003_TEST_Gamma_Zürich,2.5,
+2026-09-02,99001_TEST_Alpha_Genève,0:45,mail
+2026-09-02,99002_TEST_Beta_Lausanne,"3,25",décimale avec virgule

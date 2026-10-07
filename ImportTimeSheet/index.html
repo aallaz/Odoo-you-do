@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#f6f4f1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Import TimeSheet</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23f6f3ec%22/><path d=%22M50 28 v28 M38 46 l12 12 12-12%22 stroke=%22%23ecab0f%22 stroke-width=%227%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22 fill=%22none%22/></svg>">
+
+<link rel="stylesheet" href="../shared/style.css">
+<style>
+  :root {
+    --main-width: 820px;
+  }
+
+  h2.step {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 22px 0 8px;
+    font-weight: 500;
+  }
+
+  h2.step .n { color: var(--accent); margin-right: 6px; }
+
+  [hidden] { display: none !important; }
+
+  .drop {
+    display: block;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 26px 18px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 14px;
+    cursor: pointer;
+    background: var(--card);
+  }
+
+  .drop:hover, .drop.over { border-color: var(--accent); color: var(--accent); }
+
+  .drop input { display: none; }
+
+  .drop .file-name { display: block; color: var(--ink); font-weight: 500; margin-top: 4px; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 6px 10px;
+  }
+
+  .field input, .field select {
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    color: var(--ink);
+  }
+
+  .field input[type="number"] { width: 62px; }
+
+  .field input[type="text"] { width: 330px; max-width: 60vw; }
+
+  button.btn {
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 12px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  button.btn:hover:not(:disabled) { border-color: var(--accent); }
+
+  button.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  button.btn.primary { font-weight: 500; font-size: 14px; padding: 10px 18px; background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  button.btn.primary:hover:not(:disabled) { background: #ffffff; }
+
+  .notice {
+    font-size: 13px;
+    color: var(--accent);
+    background: #ffffff;
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 9px 12px;
+    margin-bottom: 10px;
+  }
+
+  .notice.err { color: var(--accent); background: rgba(236, 171, 15, 0.08); border-color: var(--accent); }
+
+  .hint { font-size: 12.5px; color: var(--muted); margin: 6px 0 0; }
+
+  .grid-wrap {
+    padding-bottom: 20px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink) transparent;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: auto;
+    max-height: 380px;
+  }
+
+  table.grid { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+
+  table.grid th, table.grid td {
+    padding: 5px 9px;
+    border-bottom: 1px solid var(--sep);
+    text-align: left;
+    white-space: nowrap;
+    max-width: 210px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  table.grid thead th { position: sticky; top: 0; background: #ffffff; z-index: 1; padding: 6px 6px; }
+
+  table.grid thead select {
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--accent);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 3px 2px;
+    max-width: 100%;
+  }
+
+  table.grid thead select.is-ignore { color: var(--faint); font-weight: 400; }
+
+  table.grid td.ln { color: var(--faint); font-variant-numeric: tabular-nums; text-align: right; background: #ffffff; position: sticky; left: 0; }
+
+  table.grid tr.out td { opacity: 0.35; }
+
+  table.grid tr.bad td:not(.ln) { background: rgba(236, 171, 15, 0.08); }
+
+  .list {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .row {
+    display: grid;
+    grid-template-columns: 20px 78px 1fr auto;
+    gap: 10px;
+    align-items: baseline;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--sep);
+    font-size: 13.5px;
+  }
+
+  .row:last-child { border-bottom: none; }
+
+  .row.pick { cursor: pointer; align-items: center; }
+
+  .row.head { grid-template-columns: 20px 1fr auto; background: #ffffff; font-size: 13px; font-weight: 500; cursor: pointer; align-items: center; }
+
+  .row input[type="checkbox"] { accent-color: var(--accent); width: 16px; height: 16px; margin: 0; }
+
+  .row.pick.off .name, .row.pick.off .hours, .row.pick.off .date { color: var(--faint); font-weight: 400; }
+
+  .row .date { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  .row .name { overflow-wrap: anywhere; }
+
+  .row .hours { font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  .row .tag { display: block; font-size: 11.5px; color: var(--faint); margin-top: 2px; }
+
+  .row .tag.warn { color: var(--accent); }
+
+  .row .tag.info { color: var(--accent); }
+
+  .row .tag button {
+    font: inherit;
+    color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .search { grid-column: 2 / -1; margin-top: 4px; }
+
+  .search input {
+    width: 100%;
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 10px;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    outline: none;
+  }
+
+  .search input:focus { border-color: var(--accent); }
+
+  .search .results { margin-top: 4px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+
+  .search .results:empty { display: none; }
+
+  .search .results button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font: inherit;
+    font-size: 13px;
+    padding: 7px 10px;
+    border: none;
+    border-bottom: 1px solid var(--sep);
+    background: var(--card);
+    cursor: pointer;
+  }
+
+  .search .results button:last-child { border-bottom: none; }
+
+  .search .results button:hover { background: var(--bg); }
+
+  .search .results .msg { padding: 7px 10px; font-size: 12.5px; color: var(--muted); }
+
+  .total { padding: 10px 14px; font-size: 13px; font-weight: 500; background: #ffffff; border-top: 1px solid var(--sep); }
+
+  .empty-state { padding: 26px 20px; text-align: center; color: var(--muted); font-size: 13.5px; }
+
+  details.skipped { font-size: 12.5px; color: var(--muted); margin-bottom: 12px; }
+
+  details.skipped summary { cursor: pointer; }
+
+  details.skipped ul { margin: 6px 0 0; padding-left: 20px; }
+
+  .choices { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
+
+  .choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex: 1 1 250px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 11px 13px;
+    font-size: 13.5px;
+    cursor: pointer;
+  }
+
+  .choice input { accent-color: var(--accent); margin-top: 3px; }
+
+  .choice.on { border-color: var(--accent); background: rgba(236, 171, 15, 0.06); }
+
+  .choice small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+
+  .option { display: flex; align-items: center; gap: 8px; font-size: 13.5px; margin-bottom: 12px; cursor: pointer; }
+
+  .option input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+  .result {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--ok);
+    font-size: 14px;
+  }
+
+  .result.has-errors { border-left-color: var(--accent); }
+
+  .result.failed { border-left-color: var(--accent); color: var(--accent); }
+
+  .result button.link, .result a {
+    font: inherit;
+    font-size: 14px;
+    color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
+  .report { margin-top: 12px; }
+
+  .report h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 16px 0 6px; }
+
+  .report h3.err { color: var(--accent); }
+
+  .report .row { grid-template-columns: 78px 1fr auto; }
+
+  .row .hours, .row.head, .total { color: var(--strong); }
+</style>
+</head>
+<body>
+<main>
+  <a class="back-link" href="/">← Accueil</a>
+  <h1>Import TimeSheet</h1>
+
+  <!-- 1 · Fichier -->
+  <label class="drop" id="drop">
+    Choisir un fichier .csv ou .xlsx (ou le déposer ici)
+    <span class="file-name" id="fileName"></span>
+    <input type="file" id="fileInput" accept=".csv,.tsv,.txt,.xlsx">
+  </label>
+  <div id="loadError" class="notice err" hidden></div>
+
+  <div id="workspace" hidden>
+
+    <!-- 2 · Lecture -->
+    <h2 class="step"><span class="n">1</span>Lecture du fichier</h2>
+    <div class="controls">
+      <label class="field">Modèle
+        <select id="tplSelect"></select>
+      </label>
+      <button type="button" class="btn" id="tplSave">Enregistrer comme modèle</button>
+      <button type="button" class="btn" id="tplDelete" hidden>Supprimer</button>
+    </div>
+    <div class="controls">
+      <label class="field">Lignes de <input type="number" id="fromLine" min="1" step="1"></label>
+      <label class="field">à <input type="number" id="toLine" min="1" step="1" placeholder="fin"></label>
+      <label class="field" id="sepField">Séparateur
+        <select id="sepSelect">
+          <option value=";">;</option>
+          <option value=",">,</option>
+          <option value="&#9;">tabulation</option>
+          <option value="|">|</option>
+        </select>
+      </label>
+      <label class="field" id="sheetField" hidden>Onglet <select id="sheetSelect"></select></label>
+      <button type="button" class="btn" id="detectBtn">Détecter</button>
+    </div>
+    <div class="controls">
+      <label class="field">Colonnes <input type="text" id="patternInput" spellcheck="false" placeholder="date;project;timein;timeout"></label>
+    </div>
+    <div id="problems"></div>
+    <div class="grid-wrap"><table class="grid" id="grid"></table></div>
+    <p class="hint">Choisis le rôle de chaque colonne dans l'en-tête, ou tape-les dans « Colonnes » :
+      <b>ignore</b>, <b>date</b>, <b>project</b>, <b>timein</b>, <b>timeout</b> (paires dans l'ordre : début, fin, début, fin…),
+      <b>duration</b>, <b>totaltime</b> (total du jour, sert de contrôle ou de durée s'il n'y a pas d'heures).</p>
+
+    <!-- 3 · Aperçu -->
+    <h2 class="step"><span class="n">2</span>Ce qui sera importé</h2>
+    <div class="list" id="list"></div>
+    <div id="skipped"></div>
+
+    <!-- 4 · Destination -->
+    <h2 class="step"><span class="n">3</span>Destination</h2>
+    <div class="choices">
+      <label class="choice" id="choiceTimer">
+        <input type="radio" name="dest" value="timer" checked>
+        <span>Timer<small>Base locale : tu relis, puis tu envoies vers Odoo depuis Export TimeSheet.</small></span>
+      </label>
+      <label class="choice" id="choiceOdoo">
+        <input type="radio" name="dest" value="odoo">
+        <span>Odoo directement<small>Lignes de feuille de temps. Un numéro d'affaire est obligatoire ; les doublons sont refusés.</small></span>
+      </label>
+    </div>
+    <label class="option" id="replaceOption">
+      <input type="checkbox" id="replaceInput" checked>
+      Remplacer le temps déjà enregistré (sinon il est ajouté : réimporter le même fichier doublerait les heures)
+    </label>
+    <button type="button" class="btn primary" id="goBtn">Importer dans le Timer</button>
+    <div id="resultBox"></div>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Constantes ----------
+  const TOKENS = ['ignore', 'date', 'project', 'timein', 'timeout', 'duration', 'totaltime'];
+
+  // Modèles prédéfinis : { name, sep, from, to, pattern }. `to: null` = jusqu'à la dernière ligne, `sep` ignoré pour un .xlsx.
+  // Les modèles enregistrés depuis la page sont gardés dans le navigateur (localStorage).
+  const BUILTIN_TEMPLATES = [];
+
+  const store = {
+    get(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(`import.${key}`)) ?? fallback; } catch { return fallback; }
+    },
+    set(key, value) {
+      try { localStorage.setItem(`import.${key}`, JSON.stringify(value)); } catch { /* stockage indisponible */ }
+    },
+  };
+
+  const S = {
+    fileName: '',
+    kind: '',            // 'csv' | 'xlsx'
+    text: '',            // contenu brut du CSV (pour relire avec un autre séparateur)
+    rawFile: null,       // File d'origine (pour changer d'onglet d'un .xlsx)
+    grid: [],            // grid[n - 1] = cellules de la ligne n
+    sep: ';',
+    sheet: 0,
+    from: 1,
+    to: null,
+    pattern: [],
+    entries: [],
+    skipped: [],
+    problems: [],
+    aliases: store.get('aliases', {}),      // nom sans numéro -> nom du projet Odoo
+    unchecked: new Set(),
+    search: null,                            // { key, q, results, message }
+    dest: 'timer',
+  };
+
+  // ---------- Utilitaires ----------
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const hasJobNumber = (name) => /^\d+_/.test(name.trim());
+  const plural = (n, one, many) => `${n} ${n > 1 ? many : one}`;
+  const round = (x, digits) => Math.round(x * 10 ** digits) / 10 ** digits;
+
+  function fmtHM(hours) {
+    const total = Math.round(hours * 60);
+    return `${Math.floor(total / 60)}h${String(total % 60).padStart(2, '0')}`;
+  }
+
+  const targetName = (e) => S.aliases[e.name] || e.name;
+
+  // ---------- Lecture des valeurs ----------
+  function parseDate(s) {
+    s = s.trim();
+    let y, m, d, match;
+    if ((match = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[\sT].*)?$/))) {
+      [, y, m, d] = match;
+    } else if ((match = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4}|\d{2})(?:\s.*)?$/))) {
+      [, d, m, y] = match;
+      if (y.length === 2) y = `20${y}`;
+    } else {
+      return null;
+    }
+    y = +y; m = +m; d = +d;
+    const check = new Date(Date.UTC(y, m - 1, d));
+    if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) return null;
+    return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  }
+
+  // Heure de la journée -> minutes depuis minuit (accepte 8:05, 08:23:00, 8h15, "2026-09-01 08:23:00").
+  function parseClock(s) {
+    const match = s.trim().match(/^(?:.*[\sT])?(\d{1,2})[:hH](\d{2})(?::(\d{2}))?$/);
+    if (!match) return null;
+    const h = +match[1], m = +match[2], sec = +(match[3] || 0);
+    if (h > 24 || m > 59 || sec > 59) return null;
+    return h * 60 + m + sec / 60;
+  }
+
+  // Durée -> heures décimales (accepte 1:30, 1h30, 1h, 2.5, "2,5").
+  function parseDuration(s) {
+    s = s.trim();
+    let match;
+    if ((match = s.match(/^(\d+):(\d{2})(?::(\d{2}))?$/))) return +match[1] + +match[2] / 60 + +(match[3] || 0) / 3600;
+    if ((match = s.match(/^(\d+)\s*h\s*(\d{1,2})?$/i))) return +match[1] + +(match[2] || 0) / 60;
+    if (/^\d+([.,]\d+)?$/.test(s)) return parseFloat(s.replace(',', '.'));
+    return null;
+  }
+
+  // ---------- CSV ----------
+  function parseCsv(text, sep) {
+    text = text.replace(/^﻿/, '');
+    const rows = [];
+    let row = [], cell = '', quoted = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quoted) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { cell += '"'; i++; } else quoted = false;
+        } else cell += c;
+      } else if (c === '"' && cell === '') {
+        quoted = true;
+      } else if (c === sep) {
+        row.push(cell); cell = '';
+      } else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+
+  function detectSeparator(text) {
+    const lines = text.replace(/^﻿/, '').split(/\r\n|\n|\r/).slice(0, 30).map((l) => l.replace(/"[^"]*"/g, ''));
+    let best = ';', bestCount = -1;
+    for (const sep of [';', ',', '\t', '|']) {
+      const count = lines.reduce((sum, l) => sum + l.split(sep).length - 1, 0);
+      if (count > bestCount) { best = sep; bestCount = count; }
+    }
+    return best;
+  }
+
+  // ---------- Détection automatique (plage de lignes + colonnes) ----------
+  const cellText = (row, i) => String((row && row[i]) ?? '').trim();
+
+  function detectFrom() {
+    for (let n = 1; n <= S.grid.length; n++) {
+      if (S.grid[n - 1].some((c) => parseDate(String(c)) !== null)) return n;
+    }
+    return 1;
+  }
+
+  function guessPattern() {
+    const rows = S.grid.slice(S.from - 1, S.to ?? undefined);
+    const ncols = Math.max(0, ...S.grid.map((r) => r.length));
+    const info = [];
+    for (let i = 0; i < ncols; i++) {
+      const values = rows.map((r) => cellText(r, i)).filter(Boolean);
+      const all = (fn) => values.length > 0 && values.every((v) => fn(v) !== null);
+      info.push({
+        values,
+        isDate: all(parseDate),
+        isClock: all(parseClock),
+        isNumber: all(parseDuration),
+        jobShare: values.length ? values.filter(hasJobNumber).length / values.length : 0,
+      });
+    }
+
+    const pattern = new Array(ncols).fill('ignore');
+    const dateCol = info.findIndex((c) => c.isDate);
+    if (dateCol >= 0) pattern[dateCol] = 'date';
+
+    const textCols = info.map((c, i) => i).filter((i) => pattern[i] === 'ignore' && info[i].values.length && !info[i].isNumber && !info[i].isClock);
+    if (textCols.length) {
+      const best = textCols.reduce((a, b) => (info[b].jobShare > info[a].jobShare ? b : a));
+      pattern[best] = 'project';
+    }
+
+    const clockCols = info.map((c, i) => i).filter((i) => pattern[i] === 'ignore' && info[i].isClock);
+    const numberCols = info.map((c, i) => i).filter((i) => pattern[i] === 'ignore' && !info[i].isClock && info[i].isNumber);
+    if (clockCols.length === 1 && !numberCols.length) {
+      pattern[clockCols[0]] = 'duration';
+    } else if (clockCols.length) {
+      const pairs = clockCols.length - (clockCols.length % 2);
+      clockCols.slice(0, pairs).forEach((col, k) => { pattern[col] = k % 2 === 0 ? 'timein' : 'timeout'; });
+      if (clockCols.length % 2) pattern[clockCols[clockCols.length - 1]] = 'totaltime';
+    }
+    if (numberCols.length && !clockCols.length) pattern[numberCols[0]] = 'duration';
+    return pattern;
+  }
+
+  function autoDetect() {
+    S.from = detectFrom();
+    S.to = null;
+    S.pattern = guessPattern();
+  }
+
+  // ---------- Calcul des lignes à importer ----------
+  function compute() {
+    const p = S.pattern;
+    const cols = (token) => p.map((t, i) => (t === token ? i : -1)).filter((i) => i >= 0);
+    const [dateCol] = cols('date');
+    const [projCol] = cols('project');
+    const [durCol] = cols('duration');
+    const [totCol] = cols('totaltime');
+    const ins = cols('timein');
+    const outs = cols('timeout');
+    const pairs = Math.min(ins.length, outs.length);
+
+    S.problems = [];
+    S.skipped = [];
+    S.entries = [];
+    if (dateCol === undefined) S.problems.push('Il manque une colonne « date ».');
+    if (projCol === undefined) S.problems.push('Il manque une colonne « project ».');
+    if (!pairs && durCol === undefined && totCol === undefined) S.problems.push('Il manque une colonne de temps : timein + timeout, duration ou totaltime.');
+    if (ins.length !== outs.length) S.problems.push(`${plural(ins.length, 'colonne timein', 'colonnes timein')} pour ${plural(outs.length, 'colonne timeout', 'colonnes timeout')} : les paires sont incomplètes.`);
+    if (S.problems.length) return;
+
+    const rows = [];
+    const last = Math.min(S.to ?? S.grid.length, S.grid.length);
+    for (let n = S.from; n <= last; n++) {
+      const row = S.grid[n - 1] || [];
+      if (row.every((c) => !String(c ?? '').trim())) continue;
+      const cell = (i) => (i === undefined ? '' : cellText(row, i));
+      const skip = (reason) => S.skipped.push({ line: n, reason });
+
+      const date = parseDate(cell(dateCol));
+      if (!date) { skip(`date illisible « ${cell(dateCol)} »`); continue; }
+      const name = cell(projCol);
+      if (!name) { skip('projet vide'); continue; }
+
+      let hours = null, source = '', bad = null, used = 0, minutes = 0;
+      for (let k = 0; k < pairs; k++) {
+        const a = cell(ins[k]), b = cell(outs[k]);
+        if (!a && !b) continue;
+        const ta = parseClock(a), tb = parseClock(b);
+        if (ta === null || tb === null) { bad = `plage illisible « ${a} → ${b} »`; break; }
+        minutes += tb >= ta ? tb - ta : tb + 1440 - ta;   // fin < début : passage de minuit
+        used++;
+      }
+      if (bad) { skip(bad); continue; }
+      if (used) {
+        hours = minutes / 60; source = 'pairs';
+      } else if (durCol !== undefined && cell(durCol)) {
+        hours = parseDuration(cell(durCol)); source = 'duration';
+        if (hours === null) { skip(`durée illisible « ${cell(durCol)} »`); continue; }
+      }
+      const rowTotal = totCol !== undefined && cell(totCol) ? parseDuration(cell(totCol)) : null;
+      if (hours === null && rowTotal !== null) { hours = rowTotal; source = 'totaltime'; }
+      if (hours === null) { skip('aucune durée trouvée'); continue; }
+      rows.push({ line: n, date, name, hours, source, rowTotal });
+    }
+
+    // Une entrée = (date, projet) : les lignes identiques sont sommées.
+    const byKey = new Map();
+    for (const r of rows) {
+      const key = `${r.date}|${r.name}`;
+      const e = byKey.get(key) || { key, date: r.date, name: r.name, hours: 0, lines: [], warnings: [] };
+      e.hours += r.hours;
+      e.lines.push(r.line);
+      byKey.set(key, e);
+    }
+
+    // Contrôle avec « totaltime » (total du jour), en minutes.
+    const warn = (date, name, text) => {
+      const e = byKey.get(`${date}|${name}`);
+      if (e && !e.warnings.includes(text)) e.warnings.push(text);
+    };
+    const byDate = new Map();
+    for (const r of rows) byDate.set(r.date, [...(byDate.get(r.date) || []), r]);
+    for (const [date, dayRows] of byDate) {
+      const totals = [...new Set(dayRows.filter((r) => r.rowTotal !== null).map((r) => Math.round(r.rowTotal * 60)))];
+      if (totals.length === 1) {
+        const sum = Math.round(dayRows.reduce((s, r) => s + r.hours, 0) * 60);
+        if (Math.abs(totals[0] - sum) > 1) {
+          for (const r of dayRows) warn(date, r.name, `total du jour ${fmtHM(totals[0] / 60)} ≠ ${fmtHM(sum / 60)} calculé`);
+        }
+      } else if (totals.length > 1) {
+        for (const r of dayRows) {
+          if (r.rowTotal !== null && Math.abs(r.rowTotal - r.hours) * 60 > 1) warn(date, r.name, `total ${fmtHM(r.rowTotal)} ≠ ${fmtHM(r.hours)} calculé`);
+        }
+      }
+    }
+
+    S.entries = [...byKey.values()]
+      .map((e) => ({ ...e, hours: round(e.hours, 4) }))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+  }
+
+  // Une entrée à durée nulle n'est jamais envoyée ; vers Odoo, il faut aussi un numéro d'affaire.
+  const isSelectable = (e) => e.hours > 0 && (S.dest === 'timer' || hasJobNumber(targetName(e)));
+  const toImport = () => S.entries.filter((e) => isSelectable(e) && !S.unchecked.has(e.key));
+
+  // ---------- Affichage : aperçu du fichier ----------
+  const GRID_MAX_LINES = 300;
+
+  function renderGrid() {
+    const ncols = Math.max(S.pattern.length, ...S.grid.map((r) => r.length));
+    const badLines = new Map(S.skipped.map((s) => [s.line, s.reason]));
+    const last = S.to ?? S.grid.length;
+
+    const head = '<th></th>' + Array.from({ length: ncols }, (_, i) => {
+      const token = S.pattern[i] || 'ignore';
+      const options = TOKENS.map((t) => `<option value="${t}" ${t === token ? 'selected' : ''}>${t}</option>`).join('');
+      return `<th><select data-col="${i}" class="${token === 'ignore' ? 'is-ignore' : ''}">${options}</select></th>`;
+    }).join('');
+
+    const shown = S.grid.slice(0, GRID_MAX_LINES);
+    const body = shown.map((row, idx) => {
+      const n = idx + 1;
+      const inRange = n >= S.from && n <= last;
+      const reason = badLines.get(n);
+      const cls = [inRange ? '' : 'out', reason ? 'bad' : ''].join(' ');
+      const cells = Array.from({ length: ncols }, (_, i) => `<td title="${esc(row[i] ?? '')}">${esc(row[i] ?? '')}</td>`).join('');
+      return `<tr class="${cls}" ${reason ? `title="${esc(reason)}"` : ''}><td class="ln">${n}</td>${cells}</tr>`;
+    }).join('');
+    const more = S.grid.length > GRID_MAX_LINES ? `<tr><td class="ln"></td><td colspan="${ncols}">… ${S.grid.length - GRID_MAX_LINES} lignes de plus (non affichées)</td></tr>` : '';
+    $('grid').innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}${more}</tbody>`;
+  }
+
+  function renderControls() {
+    $('fromLine').value = S.from;
+    $('toLine').value = S.to ?? '';
+    $('patternInput').value = patternToText();
+    $('sepField').hidden = S.kind !== 'csv';
+    $('sepSelect').value = S.sep;
+  }
+
+  const patternToText = () => {
+    const tokens = [...S.pattern];
+    while (tokens.length && tokens[tokens.length - 1] === 'ignore') tokens.pop();
+    return tokens.join(';');
+  };
+
+  // ---------- Affichage : lignes à importer ----------
+  function renderList() {
+    $('problems').innerHTML = S.problems.map((t) => `<div class="notice err">${esc(t)}</div>`).join('');
+
+    const list = $('list');
+    if (S.problems.length) {
+      list.innerHTML = '<div class="empty-state">Complète les colonnes pour voir le résultat.</div>';
+    } else if (!S.entries.length) {
+      list.innerHTML = '<div class="empty-state">Aucune ligne exploitable dans cette plage.</div>';
+    } else {
+      const selected = toImport();
+      const selectable = S.entries.filter(isSelectable);
+      const totalHours = selected.reduce((s, e) => s + e.hours, 0);
+
+      const head = `<label class="row head"><input type="checkbox" id="checkAll"><span>Tout sélectionner</span><span>${selected.length}/${selectable.length}</span></label>`;
+      const rows = S.entries.map((e) => {
+        const selectable = isSelectable(e);
+        const checked = selectable && !S.unchecked.has(e.key);
+        const target = targetName(e);
+        const tags = [];
+        if (e.hours <= 0) tags.push('<span class="tag warn">durée nulle : ignorée</span>');
+        if (!hasJobNumber(target)) {
+          const state = S.dest === 'odoo' ? 'sans numéro : impossible vers Odoo' : 'sans numéro : sera inutilisable pour Odoo';
+          tags.push(`<span class="tag ${S.dest === 'odoo' ? 'warn' : 'info'}">${state} · <button type="button" data-search="${esc(e.key)}">chercher dans Odoo</button></span>`);
+        } else if (target !== e.name) {
+          tags.push(`<span class="tag info">→ ${esc(target)} · <button type="button" data-unalias="${esc(e.name)}">retirer</button></span>`);
+        }
+        for (const w of e.warnings) tags.push(`<span class="tag warn">${esc(w)}</span>`);
+        const panel = S.search && S.search.key === e.key ? searchPanel() : '';
+        return `<div class="row pick ${checked ? '' : 'off'}">
+          <input type="checkbox" data-key="${esc(e.key)}" ${checked ? 'checked' : ''} ${selectable ? '' : 'disabled'}>
+          <span class="date">${esc(e.date)}</span>
+          <span class="name">${esc(e.name)}${tags.join('')}</span>
+          <span class="hours">${fmtHM(e.hours)}</span>
+          ${panel}
+        </div>`;
+      }).join('');
+      list.innerHTML = head + rows + `<div class="total">${plural(selected.length, 'ligne', 'lignes')} à importer · ${fmtHM(totalHours)}</div>`;
+
+      const all = $('checkAll');
+      all.checked = selectable.length > 0 && selected.length === selectable.length;
+      all.indeterminate = selected.length > 0 && selected.length < selectable.length;
+      all.disabled = selectable.length === 0;
+    }
+
+    const skipped = $('skipped');
+    skipped.innerHTML = S.skipped.length
+      ? `<details class="skipped"><summary>${plural(S.skipped.length, 'ligne ignorée', 'lignes ignorées')} (illisibles)</summary><ul>${S.skipped.map((s) => `<li>ligne ${s.line} : ${esc(s.reason)}</li>`).join('')}</ul></details>`
+      : '';
+
+    $('goBtn').disabled = toImport().length === 0;
+    $('goBtn').textContent = S.dest === 'timer' ? 'Importer dans le Timer' : 'Envoyer vers Odoo';
+    $('replaceOption').hidden = S.dest !== 'timer';
+    $('choiceTimer').classList.toggle('on', S.dest === 'timer');
+    $('choiceOdoo').classList.toggle('on', S.dest === 'odoo');
+  }
+
+  function searchPanel() {
+    const s = S.search;
+    return `<div class="search"><input type="text" id="searchInput" value="${esc(s.q)}" placeholder="Nom ou numéro du projet Odoo" autocomplete="off"><div class="results" id="searchResults">${searchResultsHtml()}</div></div>`;
+  }
+
+  function searchResultsHtml() {
+    const s = S.search;
+    if (s.message) return `<div class="msg">${esc(s.message)}</div>`;
+    return s.results.map((p, i) => `<button type="button" data-pick="${i}">${esc(p.name)}</button>`).join('');
+  }
+
+  function refresh() {
+    compute();
+    renderControls();
+    renderGrid();
+    renderList();
+  }
+
+  // ---------- Recherche de projet Odoo ----------
+  let searchTimer = null;
+  let searchSeq = 0;
+
+  async function runSearch() {
+    const q = S.search.q.trim();
+    const seq = ++searchSeq;
+    if (q.length < 2) { S.search.results = []; S.search.message = 'Tape au moins 2 caractères.'; updateResults(); return; }
+    S.search.message = 'Recherche…';
+    updateResults();
+    try {
+      const res = await fetch(`/api/odoo/projects?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (seq !== searchSeq || !S.search) return;
+      if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+      S.search.results = data;
+      S.search.message = data.length ? '' : 'Aucun projet trouvé.';
+    } catch (err) {
+      if (seq !== searchSeq || !S.search) return;
+      S.search.results = [];
+      S.search.message = err.message;
+    }
+    updateResults();
+  }
+
+  function updateResults() {
+    const box = $('searchResults');
+    if (box && S.search) box.innerHTML = searchResultsHtml();
+  }
+
+  // Terme de recherche initial : le nom sans numéro, sans ponctuation superflue.
+  const initialQuery = (name) => name.replace(/[_]+/g, ' ').trim();
+
+  // ---------- Modèles ----------
+  const userTemplates = () => store.get('templates', []);
+  const allTemplates = () => [...BUILTIN_TEMPLATES, ...userTemplates()];
+
+  function renderTemplates(selected = '') {
+    const options = ['<option value="">— manuel —</option>']
+      .concat(allTemplates().map((t) => `<option value="${esc(t.name)}" ${t.name === selected ? 'selected' : ''}>${esc(t.name)}</option>`));
+    $('tplSelect').innerHTML = options.join('');
+    $('tplDelete').hidden = !userTemplates().some((t) => t.name === selected);
+  }
+
+  async function applyTemplate(t) {
+    S.from = t.from ?? 1;
+    S.to = t.to ?? null;
+    S.pattern = [...t.pattern];
+    if (S.kind === 'csv' && t.sep && t.sep !== S.sep) {
+      S.sep = t.sep;
+      S.grid = parseCsv(S.text, S.sep);
+    }
+    S.unchecked.clear();
+    refresh();
+  }
+
+  // ---------- Chargement d'un fichier ----------
+  function showLoadError(message) {
+    $('loadError').textContent = message;
+    $('loadError').hidden = !message;
+  }
+
+  async function readCsvFile(file) {
+    const buffer = await file.arrayBuffer();
+    try {
+      return new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+    } catch {
+      return new TextDecoder('windows-1252').decode(buffer);   // CSV exporté par Excel sous Windows
+    }
+  }
+
+  function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result).split(',')[1]);
+      reader.onerror = () => reject(new Error('Lecture du fichier impossible'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function loadXlsx(file, sheet) {
+    const res = await fetch('/api/import/parse-xlsx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: await fileToBase64(file), sheet }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+    return data;
+  }
+
+  async function loadFile(file) {
+    showLoadError('');
+    try {
+      S.fileName = file.name;
+      S.rawFile = file;
+      if (/\.xlsx$/i.test(file.name)) {
+        S.kind = 'xlsx';
+        S.sheet = 0;
+        const data = await loadXlsx(file, 0);
+        S.grid = data.rows;
+        $('sheetSelect').innerHTML = data.sheets.map((n, i) => `<option value="${i}">${esc(n)}</option>`).join('');
+        $('sheetField').hidden = data.sheets.length < 2;
+      } else {
+        S.kind = 'csv';
+        S.text = await readCsvFile(file);
+        S.sep = detectSeparator(S.text);
+        S.grid = parseCsv(S.text, S.sep);
+        $('sheetField').hidden = true;
+      }
+    } catch (err) {
+      showLoadError(`Fichier illisible : ${err.message}`);
+      return;
+    }
+    if (!S.grid.length) { showLoadError('Le fichier est vide.'); return; }
+
+    $('fileName').textContent = file.name;
+    $('workspace').hidden = false;
+    $('resultBox').innerHTML = '';
+    S.unchecked.clear();
+    S.search = null;
+    autoDetect();
+    renderTemplates();
+    refresh();
+  }
+
+  // ---------- Envoi ----------
+  function reportRows(items, withReason) {
+    return items.map((i) => {
+      const sub = withReason ? i.reason : (i.note || (i.project ? `→ ${i.project}` : ''));
+      return `<div class="row"><span class="date">${esc(i.date)}</span><span class="name">${esc(i.name)}${sub ? `<span class="tag">${esc(sub)}</span>` : ''}</span><span class="hours">${fmtHM(i.hours)}</span></div>`;
+    }).join('');
+  }
+
+  function showReport(report) {
+    const { imported, errors, ignored } = report;
+    const where = S.dest === 'timer' ? 'dans le Timer' : 'dans Odoo';
+    const summary = `${plural(imported.length, 'ligne importée', 'lignes importées')} ${where}, ${plural(errors.length, 'erreur', 'erreurs')}.`;
+
+    let sections = '';
+    if (errors.length) sections += `<h3 class="err">Erreurs (${errors.length})</h3><div class="list">${reportRows(errors, true)}</div>`;
+    if (imported.length) sections += `<h3>Importées (${imported.length})</h3><div class="list">${reportRows(imported, false)}</div>`;
+    if (ignored.length) sections += `<h3>Ignorées (${ignored.length})</h3><div class="list">${reportRows(ignored, true)}</div>`;
+
+    const next = S.dest === 'timer' && imported.length
+      ? ' <a href="/timer">Ouvrir le Timer</a> · <a href="/export-timesheet">Exporter vers Odoo</a>'
+      : '';
+    $('resultBox').innerHTML = `
+      <div class="result ${errors.length ? 'has-errors' : ''}">
+        ${esc(summary)} <button type="button" class="link" id="toggleReport">Voir le rapport</button>${next ? `<div style="margin-top:8px">${next}</div>` : ''}
+        <div class="report" id="reportBody" hidden>${sections || '<div class="empty-state">Rien à signaler.</div>'}</div>
+      </div>`;
+    $('toggleReport').addEventListener('click', () => {
+      const body = $('reportBody');
+      body.hidden = !body.hidden;
+      $('toggleReport').textContent = body.hidden ? 'Voir le rapport' : 'Masquer le rapport';
+    });
+  }
+
+  async function send() {
+    const btn = $('goBtn');
+    const entries = toImport().map((e) => ({
+      name: targetName(e),
+      date: e.date,
+      hours: S.dest === 'odoo' ? round(e.hours, 2) : e.hours,   // Odoo : 2 décimales, comme l'export
+    }));
+    const url = S.dest === 'timer' ? '/api/import/timer' : '/api/export/odoo';
+    const body = S.dest === 'timer'
+      ? { entries, mode: $('replaceInput').checked ? 'replace' : 'add' }
+      : { entries, ignore_no_number: true };
+
+    btn.disabled = true;
+    btn.textContent = 'Envoi en cours…';
+    $('resultBox').innerHTML = '';
+    try {
+      const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Erreur ${res.status}`);
+      showReport(data);
+    } catch (err) {
+      $('resultBox').innerHTML = `<div class="result failed">Import interrompu : ${esc(err.message)}</div>`;
+    } finally {
+      renderList();
+    }
+  }
+
+  // ---------- Événements ----------
+  $('fileInput').addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+  const drop = $('drop');
+  for (const type of ['dragenter', 'dragover']) drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.add('over'); });
+  for (const type of ['dragleave', 'drop']) drop.addEventListener(type, (e) => { e.preventDefault(); drop.classList.remove('over'); });
+  drop.addEventListener('drop', (e) => { if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+  function readLineInputs() {
+    const from = parseInt($('fromLine').value, 10);
+    const to = parseInt($('toLine').value, 10);
+    S.from = from > 0 ? from : 1;
+    S.to = to > 0 ? to : null;
+    refresh();
+  }
+  $('fromLine').addEventListener('change', readLineInputs);
+  $('toLine').addEventListener('change', readLineInputs);
+
+  $('detectBtn').addEventListener('click', () => { autoDetect(); S.unchecked.clear(); renderTemplates(); refresh(); });
+
+  $('sepSelect').addEventListener('change', (e) => {
+    S.sep = e.target.value;
+    S.grid = parseCsv(S.text, S.sep);
+    autoDetect();
+    refresh();
+  });
+
+  $('sheetSelect').addEventListener('change', async (e) => {
+    try {
+      S.sheet = +e.target.value;
+      S.grid = (await loadXlsx(S.rawFile, S.sheet)).rows;
+      autoDetect();
+      refresh();
+    } catch (err) {
+      showLoadError(`Fichier illisible : ${err.message}`);
+    }
+  });
+
+  // Rôle d'une colonne choisi dans l'en-tête : on ne redessine pas le tableau (les listes déroulantes restent en place).
+  $('grid').addEventListener('change', (e) => {
+    if (e.target.dataset.col === undefined) return;
+    const col = +e.target.dataset.col;
+    while (S.pattern.length <= col) S.pattern.push('ignore');
+    S.pattern[col] = e.target.value;
+    e.target.classList.toggle('is-ignore', e.target.value === 'ignore');
+    compute();
+    $('patternInput').value = patternToText();
+    renderList();
+    renderGridRows();
+  });
+
+  // Recolore les lignes du tableau (hors plage / illisibles) sans toucher aux en-têtes.
+  function renderGridRows() {
+    const badLines = new Map(S.skipped.map((s) => [s.line, s.reason]));
+    const last = S.to ?? S.grid.length;
+    $('grid').querySelectorAll('tbody tr').forEach((tr, idx) => {
+      const n = idx + 1;
+      tr.classList.toggle('out', !(n >= S.from && n <= last));
+      tr.classList.toggle('bad', badLines.has(n));
+    });
+  }
+
+  $('patternInput').addEventListener('change', (e) => {
+    const tokens = e.target.value.split(/[;,\s|]+/).filter(Boolean).map((t) => t.toLowerCase());
+    const unknown = tokens.filter((t) => !TOKENS.includes(t));
+    if (unknown.length) {
+      showLoadError(`Colonne inconnue : ${unknown.join(', ')}. Valeurs possibles : ${TOKENS.join(', ')}.`);
+      e.target.value = patternToText();
+      return;
+    }
+    showLoadError('');
+    S.pattern = tokens;
+    refresh();
+  });
+
+  $('tplSelect').addEventListener('change', (e) => {
+    const t = allTemplates().find((x) => x.name === e.target.value);
+    renderTemplates(e.target.value);
+    if (t) applyTemplate(t);
+  });
+
+  $('tplSave').addEventListener('click', () => {
+    const name = (prompt('Nom du modèle :') || '').trim();
+    if (!name) return;
+    const template = { name, sep: S.kind === 'csv' ? S.sep : null, from: S.from, to: S.to, pattern: [...S.pattern] };
+    store.set('templates', [...userTemplates().filter((t) => t.name !== name), template]);
+    renderTemplates(name);
+  });
+
+  $('tplDelete').addEventListener('click', () => {
+    const name = $('tplSelect').value;
+    store.set('templates', userTemplates().filter((t) => t.name !== name));
+    renderTemplates();
+  });
+
+  // Liste des lignes : cases à cocher, recherche de projet, alias (le DOM est refait à chaque changement).
+  $('list').addEventListener('change', (e) => {
+    if (e.target.id === 'checkAll') {
+      for (const en of S.entries.filter(isSelectable)) {
+        if (e.target.checked) S.unchecked.delete(en.key);
+        else S.unchecked.add(en.key);
+      }
+    } else if (e.target.dataset.key) {
+      if (e.target.checked) S.unchecked.delete(e.target.dataset.key);
+      else S.unchecked.add(e.target.dataset.key);
+    } else return;
+    renderList();
+  });
+
+  $('list').addEventListener('click', (e) => {
+    const openBtn = e.target.closest('[data-search]');
+    if (openBtn) {
+      e.preventDefault();
+      const entry = S.entries.find((x) => x.key === openBtn.dataset.search);
+      S.search = { key: entry.key, q: initialQuery(entry.name), results: [], message: '' };
+      renderList();
+      const input = $('searchInput');
+      if (input) { input.focus(); input.select(); }
+      runSearch();
+      return;
+    }
+    const unalias = e.target.closest('[data-unalias]');
+    if (unalias) {
+      e.preventDefault();
+      delete S.aliases[unalias.dataset.unalias];
+      store.set('aliases', S.aliases);
+      renderList();
+      return;
+    }
+    const pick = e.target.closest('[data-pick]');
+    if (pick && S.search) {
+      const entry = S.entries.find((x) => x.key === S.search.key);
+      S.aliases[entry.name] = S.search.results[+pick.dataset.pick].name;
+      store.set('aliases', S.aliases);
+      S.search = null;
+      renderList();
+    }
+  });
+
+  $('list').addEventListener('input', (e) => {
+    if (e.target.id !== 'searchInput') return;
+    S.search.q = e.target.value;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 300);
+  });
+
+  for (const radio of document.querySelectorAll('input[name="dest"]')) {
+    radio.addEventListener('change', () => { S.dest = radio.value; S.search = null; renderList(); });
+  }
+
+  $('goBtn').addEventListener('click', send);
+
+  renderTemplates();
+</script>
+</body>
+</html>

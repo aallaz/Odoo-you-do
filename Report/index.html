@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<meta name="theme-color" content="#f6f4f1">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Report</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23f6f4f1%22/><path d=%22M32 66 v-22 M50 66 v-34 M68 66 v-14%22 stroke=%22%237b7b7b%22 stroke-width=%229%22 stroke-linecap=%22round%22/></svg>">
+
+<link rel="stylesheet" href="../shared/style.css">
+<style>
+  :root {
+    --main-width: 860px;
+  }
+
+  table { border-collapse: collapse; width: 100%; min-width: 560px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back-link" href="/">← Accueil</a>
+  <h1>Report</h1>
+
+  <div class="controls">
+    <label>Du <input type="date" id="startDate"></label>
+    <label>au <input type="date" id="endDate"></label>
+    <button id="refreshBtn" type="button">Actualiser</button>
+  </div>
+
+  <div class="table-wrap" id="reportWrap"></div>
+</main>
+
+<script>
+  // --- Données (chargées depuis le même backend que Timer : Timer/timer_store.py + Timer/timer.db) ---
+  let projects = [];
+
+  async function loadProjects() {
+    const res = await fetch('/api/timer/state', { cache: 'no-store' });
+    const state = await res.json();
+    projects = state.projects;
+  }
+
+  function fmt(mins) {
+    mins = Math.round(mins);
+    if (mins <= 0) return '0m';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  }
+
+  function fmtDay(iso) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString('fr-CH', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  function buildReport(startDate, endDate) {
+    const cells = {};
+    const dayTotals = {};
+    const projectTotals = {};
+    let grandTotal = 0;
+
+    for (const project of projects) {
+      for (const { date, minutes } of project.history) {
+        if (minutes <= 0) continue;
+        if (startDate && date < startDate) continue;
+        if (endDate && date > endDate) continue;
+
+        cells[date] ||= {};
+        cells[date][project.id] = (cells[date][project.id] || 0) + minutes;
+        dayTotals[date] = (dayTotals[date] || 0) + minutes;
+        projectTotals[project.id] = (projectTotals[project.id] || 0) + minutes;
+        grandTotal += minutes;
+      }
+    }
+
+    const days = Object.keys(cells).sort();
+    const visibleProjects = projects.filter((p) => projectTotals[p.id]);
+
+    return { days, cells, dayTotals, projectTotals, grandTotal, visibleProjects };
+  }
+
+  let currentReport = null;
+  const reportWrap = document.getElementById('reportWrap');
+  const startInput = document.getElementById('startDate');
+  const endInput = document.getElementById('endDate');
+
+  function renderTable(report) {
+    currentReport = report;
+
+    if (!report.days.length) {
+      reportWrap.innerHTML = `<p class="empty-state">Aucun temps enregistré sur cette période.</p>`;
+      return;
+    }
+
+    const header = report.visibleProjects.map((p) => `<th>${escapeHtml(p.name)}</th>`).join('');
+    const rows = report.days.map((day) => {
+      const cellsHtml = report.visibleProjects.map((p) => {
+        const mins = report.cells[day][p.id] || 0;
+        return mins ? `<td>${fmt(mins)}</td>` : `<td class="cell-empty">—</td>`;
+      }).join('');
+      return `<tr>
+        <td class="day-link" data-day="${day}">${fmtDay(day)}</td>
+        <td><strong>${fmt(report.dayTotals[day])}</strong></td>
+        ${cellsHtml}
+      </tr>`;
+    }).join('');
+    const footer = report.visibleProjects.map((p) => `<td>${fmt(report.projectTotals[p.id] || 0)}</td>`).join('');
+
+    reportWrap.innerHTML = `
+      <table>
+        <thead><tr><th>Jour</th><th>Total</th>${header}</tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td>Total</td><td>${fmt(report.grandTotal)}</td>${footer}</tr></tfoot>
+      </table>`;
+
+    reportWrap.querySelectorAll('.day-link[data-day]').forEach((el) => {
+      el.addEventListener('click', () => renderDay(el.dataset.day));
+    });
+  }
+
+  function renderDay(day) {
+    const rows = currentReport.visibleProjects
+      .map((p) => ({ p, mins: currentReport.cells[day][p.id] || 0 }))
+      .filter((row) => row.mins > 0)
+      .sort((a, b) => b.mins - a.mins)
+      .map((row) => `<tr><td>${escapeHtml(row.p.name)}</td><td><strong>${fmt(row.mins)}</strong></td></tr>`)
+      .join('');
+
+    reportWrap.innerHTML = `
+      <table>
+        <thead><tr><th>${fmtDay(day)}</th><th>${fmt(currentReport.dayTotals[day])}</th></tr></thead>
+      </table>
+      <table>
+        <thead><tr><th>Projet</th><th>Temps</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+
+    const backBtn = document.createElement('button');
+    backBtn.className = 'back-to-table';
+    backBtn.textContent = '← Retour au rapport';
+    backBtn.addEventListener('click', () => { backBtn.remove(); renderTable(currentReport); });
+    reportWrap.after(backBtn);
+  }
+
+  async function refresh() {
+    reportWrap.innerHTML = `<p class="empty-state">Chargement…</p>`;
+    await loadProjects();
+    renderTable(buildReport(startInput.value, endInput.value));
+  }
+
+  const today = new Date();
+  endInput.value = today.toISOString().slice(0, 10);
+  startInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
+
+  startInput.addEventListener('change', refresh);
+  endInput.addEventListener('change', refresh);
+  document.getElementById('refreshBtn').addEventListener('click', refresh);
+
+  refresh();
+</script>
+</body>
+</html>
