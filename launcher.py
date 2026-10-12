@@ -26,7 +26,7 @@ from pathlib import Path
 import paths
 
 INI_PATH = paths.data_root() / "launcher.ini"
-DEFAULT_WIN_W, DEFAULT_WIN_H = 980, 550
+DEFAULT_WIN_W, DEFAULT_WIN_H = 980, 800
 
 
 def load_window_size():
