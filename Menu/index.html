@@ -63,11 +63,19 @@
   .icon-box svg { width: 46px; height: 46px; }
 
   .label { font-size: 14px; font-weight: 500; text-align: center; }
+
+  .restart-link {
+    color: var(--muted, #7b7b7b);
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .restart-link:hover { color: var(--accent); }
 </style>
 </head>
 <body>
 <main>
-  <p class="eyebrow">Odoo you do</p>
+  <p class="eyebrow">Odoo you do <a class="restart-link" id="restart-link">- redémarrer</a></p>
 
   <div class="grid">
     <a class="tile" href="/gohome">
@@ -141,5 +149,34 @@
     </a>
   </div>
 </main>
+<script>
+  const restartLink = document.getElementById("restart-link");
+  restartLink.addEventListener("click", async () => {
+    restartLink.textContent = "- redémarrage...";
+    restartLink.style.pointerEvents = "none";
+    try {
+      await fetch("/api/server/restart", { method: "POST" });
+    } catch (err) {
+      // Normal : le serveur coupe la connexion en cours de redémarrage.
+    }
+    const waitAndReload = async () => {
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        try {
+          const res = await fetch("/", { cache: "no-store" });
+          if (res.ok) {
+            location.reload();
+            return;
+          }
+        } catch (err) {
+          // Pas encore remonté, on retente.
+        }
+      }
+      restartLink.textContent = "- redémarrer (échec, réessaie)";
+      restartLink.style.pointerEvents = "auto";
+    };
+    waitAndReload();
+  });
+</script>
 </body>
 </html>

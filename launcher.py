@@ -52,21 +52,9 @@ def is_up(url):
 
 
 def start_server(port):
-    if getattr(sys, "frozen", False):
-        # Exécutable PyInstaller : pas de python.exe séparable, on se relance soi-même avec un
-        # indicateur caché qui bascule main() vers server.main() au lieu d'ouvrir le navigateur.
-        cmd = [sys.executable, "--serve", "--port", str(port)]
-    else:
-        cmd = [sys.executable, str(paths.assets_root() / "server.py"), "--port", str(port)]
-    kwargs = {
-        "cwd": str(paths.data_root()),
-        "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
-    }
-    if sys.platform == "win32":
-        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
-    else:
-        kwargs["start_new_session"] = True
-    subprocess.Popen(cmd, **kwargs)
+    # Exécutable PyInstaller : pas de python.exe séparable, paths.spawn_server() se relance alors
+    # soi-même avec un indicateur caché qui bascule main() vers server.main() (voir plus bas).
+    paths.spawn_server(port)
 
 
 def find_browser():

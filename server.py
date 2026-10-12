@@ -37,6 +37,8 @@ import json
 import mimetypes
 import os
 import sys
+import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from datetime import date
 from pathlib import Path
@@ -245,7 +247,23 @@ class Handler(BaseHTTPRequestHandler):
             self._import_to_timer(payload)
             return
 
+        if path == "/api/server/restart":
+            self._restart_server()
+            return
+
         self.send_error(404, "Not found")
+
+    def _restart_server(self):
+        port = self.server.server_address[1]
+        self._send_json({"ok": True})
+
+        def _do_restart():
+            time.sleep(0.3)  # laisse le temps à la réponse JSON de partir vers le navigateur
+            paths.spawn_server(port)
+            time.sleep(0.3)  # laisse le temps au nouveau serveur de démarrer avant de couper l'ancien
+            os._exit(0)
+
+        threading.Thread(target=_do_restart, daemon=True).start()
 
     def _serve_static(self, path):
         segment, _, rest = path.lstrip("/").partition("/")

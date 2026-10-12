@@ -10,6 +10,7 @@ distinguer :
 """
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -50,3 +51,21 @@ def assets_root():
         marker.write_text(exe_mtime, encoding="utf-8")
 
     return persistent
+
+
+def spawn_server(port):
+    """Lance une nouvelle instance détachée du serveur (même logique que launcher.py au premier
+    démarrage) : utilisé aussi bien par le lanceur que par le bouton « redémarrer » du Menu."""
+    if FROZEN:
+        cmd = [sys.executable, "--serve", "--port", str(port)]
+    else:
+        cmd = [sys.executable, str(assets_root() / "server.py"), "--port", str(port)]
+    kwargs = {
+        "cwd": str(data_root()),
+        "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
+    else:
+        kwargs["start_new_session"] = True
+    subprocess.Popen(cmd, **kwargs)
