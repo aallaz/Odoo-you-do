@@ -71,6 +71,30 @@ timer_store.init_db()
 timer_store.seed_entry("26006_EXH_W&W2027_Scéno LAB & EXPO", "2026-09-14", 4 * 3600)
 timer_store.seed_entry("Séance", "2026-09-14", 1 * 3600)
 
+# Détection de déconnexion : chaque page de l'app envoie un heartbeat (voir shared/heartbeat.js).
+# Si plus aucun n'arrive pendant HEARTBEAT_TIMEOUT (fenêtre fermée, PC éteint/en veille...), on
+# considère l'utilisateur parti et on arrête le chrono en cours. `_last_heartbeat` démarre à l'heure
+# de lancement du serveur : si la fenêtre n'a jamais été ouverte (ou vient d'être relancée), on laisse
+# le même délai de grâce avant de couper, plutôt que de couper instantanément faute de heartbeat.
+HEARTBEAT_TIMEOUT = 60
+HEARTBEAT_CHECK_INTERVAL = 10
+_heartbeat_lock = threading.Lock()
+_last_heartbeat = time.time()
+
+
+def _watch_heartbeat():
+    while True:
+        time.sleep(HEARTBEAT_CHECK_INTERVAL)
+        with _heartbeat_lock:
+            elapsed = time.time() - _last_heartbeat
+        if elapsed > HEARTBEAT_TIMEOUT:
+            state = timer_store.get_state()
+            if state.get("running"):
+                timer_store.stop_project()
+
+
+threading.Thread(target=_watch_heartbeat, daemon=True).start()
+
 # Route (segment d'URL) -> dossier de l'app qui la sert.
 APPS = {
     "": ROOT / "Menu",
@@ -249,6 +273,13 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/server/restart":
             self._restart_server()
+            return
+
+        if path == "/api/heartbeat":
+            global _last_heartbeat
+            with _heartbeat_lock:
+                _last_heartbeat = time.time()
+            self._send_json({"ok": True})
             return
 
         self.send_error(404, "Not found")
