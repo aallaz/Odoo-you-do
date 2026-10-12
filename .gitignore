@@ -1,18 +1,13 @@
-.gradle/
-build/
-**/build/
-local.properties
-.idea/
-*.iml
-*.log
-*.env
-
-
 # Python
 __pycache__/
 *.pyc
 
-# Données locales / secrets
-*.db
-.env*
+# Secrets / données locales (jamais versionnés)
+.env
+.env.*
 !.env.example
+*.db
+
+# Sauvegardes et exports personnels (noms de projets, heures réelles)
+Odoo.zip
+tasks*.csv

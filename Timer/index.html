@@ -52,6 +52,10 @@
 
   .icon-btn svg { width: 18px; height: 18px; }
 
+  .header-icons { display: flex; gap: 8px; }
+
+  .icon-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
   .today-total { font-size: 13px; margin: 4px 0 24px; }
 
   .today-total strong { font-weight: 500; }
@@ -272,7 +276,142 @@
 
   .row .date svg { width: 15px; height: 15px; }
 
+  .row.editable { cursor: pointer; }
+
+  .row.editable:hover { border-color: var(--accent); }
+
+  .row.editing { flex-direction: column; align-items: stretch; cursor: default; }
+
+  .edit-form { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+
+  .edit-name {
+    border: var(--border);
+    border-radius: 10px;
+    padding: 9px 10px;
+    font-size: 14px;
+    font-weight: 500;
+    font-family: inherit;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  .edit-time-row { display: flex; gap: 10px; }
+
+  .edit-time-row label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .edit-time-row input[type="time"] {
+    border: var(--border);
+    border-radius: 10px;
+    padding: 7px 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  .edit-time-row input:disabled { opacity: 0.5; }
+
+  .edit-or { font-size: 11px; opacity: 0.6; text-align: center; }
+
+  .edit-duration-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .edit-duration-wrap input {
+    border: var(--border);
+    border-radius: 10px;
+    padding: 7px 8px;
+    font-size: 14px;
+    font-family: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  .edit-hint { font-size: 11px; margin: 0; opacity: 0.7; }
+
+  .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  .edit-actions button {
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .edit-save { background: var(--accent); color: var(--on-accent); }
+
+  .edit-cancel { background: var(--card); border: var(--border); color: var(--ink); }
+
+  .edit-delete {
+    background: none;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    margin-right: auto;
+  }
+
+  .edit-delete:disabled { opacity: 0.4; border-color: var(--faint); color: var(--faint); cursor: not-allowed; }
+
   .empty-list { text-align: center; font-size: 13px; padding: 30px 0; }
+
+  .day-log-section { margin-top: 28px; }
+
+  .log-list {
+    background: var(--card);
+    border: var(--border);
+    border-radius: 16px;
+    padding: 4px 14px;
+  }
+
+  .log-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    font-size: 13px;
+  }
+
+  .log-row + .log-row { border-top: var(--border); }
+
+  .log-row.open .log-inout { color: var(--accent); font-weight: 500; }
+
+  .log-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--strong);
+    font-weight: 500;
+  }
+
+  .log-inout { font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+  .log-dur {
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+    min-width: 48px;
+    text-align: right;
+    color: var(--strong);
+    font-weight: 500;
+  }
 
   .row .today-time, .today-total strong { color: var(--strong); }
 </style>
@@ -283,11 +422,19 @@
 
   <div class="title-row">
     <h1>Timer</h1>
-    <a class="icon-btn" href="/report" title="Report">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-        <path d="M5 19V11 M12 19V5 M19 19v-7"/>
-      </svg>
-    </a>
+    <div class="header-icons">
+      <button class="icon-btn" id="editModeBtn" type="button" title="Éditer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 20h9"/>
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+        </svg>
+      </button>
+      <a class="icon-btn" href="/report" title="Report">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <path d="M5 19V11 M12 19V5 M19 19v-7"/>
+        </svg>
+      </a>
+    </div>
   </div>
   <p class="today-total">Aujourd'hui : <strong id="todayTotal">0m</strong></p>
 
@@ -305,6 +452,8 @@
 
   <p class="section-label">Projets</p>
   <div class="project-list" id="projectList"></div>
+
+  <div class="day-log-section" id="dayLogSection"></div>
 </main>
 
 <script>
@@ -316,6 +465,9 @@
   let runningId = null;    // id (number) du projet en cours, ou null
   let runningSince = null; // équivalent Date.now() du started_at renvoyé par le serveur
   let activeSuggestionIndex = -1;
+  let editMode = false;    // bascule via le crayon dans l'en-tête
+  let editingId = null;    // id du projet dont la bulle est ouverte en édition, ou null
+  let dayLog = [];         // journal in/out du jour (chargé uniquement en mode édition)
 
   const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -343,6 +495,21 @@
     return `${d}/${m}`;
   }
 
+  function fmtHHMM(d) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  // Durée -> heures décimales (accepte 1:30, 1h30, 1h, 2.5, "2,5") — même règle que dans Import TimeSheet.
+  function parseDurationHours(s) {
+    s = (s || '').trim();
+    if (!s) return null;
+    let match;
+    if ((match = s.match(/^(\d+):(\d{2})$/))) return +match[1] + +match[2] / 60;
+    if ((match = s.match(/^(\d+)\s*h\s*(\d{1,2})?$/i))) return +match[1] + +(match[2] || 0) / 60;
+    if (/^\d+([.,]\d+)?$/.test(s)) return parseFloat(s.replace(',', '.'));
+    return null;
+  }
+
   function lastEntry(p) {
     return p.history.length ? p.history[p.history.length - 1] : null;
   }
@@ -350,18 +517,23 @@
   // Minutes à afficher sur la ligne : celles du DERNIER jour travaillé uniquement
   // (+ le direct en cours si ce projet tourne).
   function rowMinutes(p) {
+    if (p.id === runningId) {
+      // En cours : la base doit être l'entrée d'AUJOURD'HUI si elle existe (une reprise plus tard
+      // dans la journée), jamais la dernière entrée de l'historique si celle-ci date d'un jour
+      // précédent — sinon l'affichage repart du minutage d'un ancien jour au lieu de 0.
+      const todayEntry = p.history.find((h) => h.date === todayISO());
+      const base = todayEntry ? todayEntry.minutes : 0;
+      return base + (Date.now() - runningSince) / 60000;
+    }
     const entry = lastEntry(p);
-    let mins = entry ? entry.minutes : 0;
-    if (p.id === runningId) mins += (Date.now() - runningSince) / 60000;
-    return mins;
+    return entry ? entry.minutes : 0;
   }
 
   function rowDate(p) {
+    // En cours -> toujours "aujourd'hui", même si la dernière entrée de l'historique est plus ancienne.
+    if (p.id === runningId) return todayISO();
     const entry = lastEntry(p);
-    if (entry) return entry.date;
-    // Projet flambant neuf, en cours de chronométrage, pas encore d'entrée d'historique
-    // (elle n'est créée qu'à l'arrêt) -> on l'affiche/trie comme "aujourd'hui".
-    return p.id === runningId ? todayISO() : null;
+    return entry ? entry.date : null;
   }
 
   function totalMinutes(p) {
@@ -419,12 +591,14 @@
     });
     applyState(await res.json());
     render();
+    refreshDayLog();
   }
 
   async function stopRunning() {
     const res = await fetch('/api/timer/stop', { method: 'POST' });
     applyState(await res.json());
     render();
+    refreshDayLog();
   }
 
   function toggleProject(id) {
@@ -443,6 +617,8 @@
   const projectInput = document.getElementById('projectInput');
   const startBtn = document.getElementById('startBtn');
   const suggestionsEl = document.getElementById('suggestions');
+  const editModeBtn = document.getElementById('editModeBtn');
+  const dayLogSectionEl = document.getElementById('dayLogSection');
 
   function render() {
     todayTotalEl.textContent = fmt(totalTodayAll());
@@ -475,11 +651,12 @@
 
     projectListEl.innerHTML = list.map((p) => {
       const isRunning = p.id === runningId;
+      if (editingId === p.id) return renderEditRow(p, isRunning);
       const icon = isRunning
         ? `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`
         : `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 4l14 8-14 8z"/></svg>`;
       return `
-        <div class="row ${isRunning ? 'running' : ''}" data-id="${p.id}">
+        <div class="row ${isRunning ? 'running' : ''} ${editMode ? 'editable' : ''}" data-id="${p.id}">
           <button class="play-btn" title="${isRunning ? 'Arrêter' : 'Démarrer'}">${icon}</button>
           <span class="name">${escapeHtml(p.name)}</span>
           <span class="today-time">${fmt(rowMinutes(p))}</span>
@@ -494,8 +671,199 @@
     }).join('');
 
     projectListEl.querySelectorAll('.row').forEach((row) => {
-      row.querySelector('.play-btn').addEventListener('click', () => toggleProject(Number(row.dataset.id)));
+      const id = Number(row.dataset.id);
+      if (editingId === id) {
+        row.querySelector('.edit-cancel').addEventListener('click', () => { editingId = null; render(); });
+        row.querySelector('.edit-save').addEventListener('click', () => saveEdit(id));
+        row.querySelector('.edit-delete').addEventListener('click', () => deleteEdit(id));
+        return;
+      }
+      row.querySelector('.play-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleProject(id);
+      });
+      if (editMode) {
+        row.addEventListener('click', () => { editingId = id; render(); });
+      }
     });
+
+    renderDayLog(); // ré-affiche depuis les données déjà chargées (fait vivre "en cours" sans re-fetch)
+  }
+
+  // Ligne "bulle" en mode édition : nom + plage début/fin (HH:MM) qui remplace la durée du jour.
+  // Pour le projet en cours, Début est figé (l'heure de démarrage réelle) et seule Fin est éditable ;
+  // enregistrer arrête le chronométrage à cette heure-là plutôt qu'à "maintenant".
+  function renderEditRow(p, isRunning) {
+    const entry = lastEntry(p);
+    // Le début n'est connu à coup sûr que pour le projet en cours (running_state) ; pour un projet déjà
+    // arrêté, on ne l'a que si un précédent stop/edit l'a enregistré (first_start_at) — sinon on ne l'a pas.
+    const knownStart = isRunning
+      ? new Date(runningSince)
+      : (entry && entry.startedAt ? new Date(entry.startedAt * 1000) : null);
+    const hint = isRunning
+      ? `En cours depuis ${fmtHHMM(knownStart)} — corrigez Début si ce n'est pas la vraie heure, laissez Fin vide pour ne pas arrêter`
+      : entry
+        ? knownStart
+          ? `Actuellement ${fmt(entry.minutes)} le ${fmtDate(entry.date)}, débuté à ${fmtHHMM(knownStart)}`
+          : `Actuellement ${fmt(entry.minutes)} le ${fmtDate(entry.date)} — heure de début inconnue`
+        : 'Aucune durée enregistrée pour l\'instant';
+    const startVal = knownStart ? fmtHHMM(knownStart) : '';
+    const endVal = ''; // toujours vide par défaut : pour le projet en cours, le remplir = l'arrêter
+    return `
+      <div class="row editing" data-id="${p.id}">
+        <div class="edit-form">
+          <input class="edit-name" type="text" value="${escapeHtml(p.name)}">
+          <div class="edit-time-row">
+            <label>Début
+              <input class="edit-start" type="time" value="${startVal}" data-original="${startVal}">
+            </label>
+            <label>Fin
+              <input class="edit-end" type="time" value="${endVal}">
+            </label>
+          </div>
+          <p class="edit-or">— ou, si l'heure de début est inconnue —</p>
+          <label class="edit-duration-wrap">Durée totale de ce jour
+            <input class="edit-duration" type="text" placeholder="ex. 1h30, 1:30, 2.5">
+          </label>
+          <p class="edit-hint">${escapeHtml(hint)}</p>
+          <div class="edit-actions">
+            <button class="edit-delete" type="button" ${isRunning || !entry ? 'disabled' : ''} title="${isRunning ? 'Arrêtez le chrono avant de supprimer' : ''}">Supprimer</button>
+            <button class="edit-cancel" type="button">Annuler</button>
+            <button class="edit-save" type="button">Enregistrer</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  // --- Journal du jour (in/out), visible seulement en mode édition ---
+  async function refreshDayLog() {
+    if (!editMode) return;
+    const res = await fetch('/api/timer/log', { cache: 'no-store' });
+    dayLog = await res.json();
+    renderDayLog();
+  }
+
+  function renderDayLog() {
+    if (!editMode) { dayLogSectionEl.innerHTML = ''; return; }
+
+    const rows = dayLog.map((s) => {
+      const inTxt = fmtHHMM(new Date(s.startAt * 1000));
+      const open = !s.endAt;
+      const outTxt = open ? 'en cours' : fmtHHMM(new Date(s.endAt * 1000));
+      const durMin = open ? (Date.now() / 1000 - s.startAt) / 60 : (s.endAt - s.startAt) / 60;
+      return `
+        <div class="log-row ${open ? 'open' : ''}">
+          <span class="log-name">${escapeHtml(s.projectName)}</span>
+          <span class="log-inout">${inTxt} → ${outTxt}</span>
+          <span class="log-dur">${fmt(durMin)}</span>
+        </div>`;
+    }).join('');
+
+    dayLogSectionEl.innerHTML = `
+      <p class="section-label">Journal du jour</p>
+      ${dayLog.length ? `<div class="log-list">${rows}</div>` : `<p class="empty-list">Aucun pointage aujourd'hui.</p>`}`;
+  }
+
+  async function saveEdit(id) {
+    let p = projects.find((x) => x.id === id);
+    const row = projectListEl.querySelector(`.row[data-id="${id}"]`);
+    if (!p || !row) { editingId = null; render(); return; }
+
+    const newName = row.querySelector('.edit-name').value.trim();
+    if (newName && newName !== p.name) {
+      const res = await fetch('/api/timer/rename', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name: newName }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      applyState(data);
+      p = projects.find((x) => x.id === id) || p;
+    }
+
+    const durationVal = row.querySelector('.edit-duration').value.trim();
+    const isRunning = id === runningId;
+
+    if (durationVal) {
+      // Durée directe : ne demande pas l'heure de début, on remplace juste le total du jour
+      // (et, si le projet tourne encore, ça l'arrête aussi).
+      const hours = parseDurationHours(durationVal);
+      if (hours === null) { alert('Durée invalide (attendu 1h30, 1:30 ou 2.5)'); return; }
+      const day = isRunning ? todayISO() : (rowDate(p) || todayISO());
+      const res = await fetch('/api/timer/set-minutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, date: day, minutes: hours * 60 }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      applyState(data);
+    } else {
+      const endVal = row.querySelector('.edit-end').value;
+      if (isRunning) {
+        const startInput = row.querySelector('.edit-start');
+        const startVal = startInput.value;
+        if (startVal && startVal !== startInput.dataset.original) {
+          // Redéfinit le début du chrono en cours (sans l'arrêter) — pour une reprise démarrée
+          // en retard dans l'app par rapport à l'heure réelle.
+          const res = await fetch('/api/timer/set-start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ start: startVal }),
+          });
+          const data = await res.json();
+          if (data.error) { alert(data.error); return; }
+          applyState(data);
+        }
+        if (endVal) {
+          const res = await fetch('/api/timer/stop-at', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ end: endVal }),
+          });
+          const data = await res.json();
+          if (data.error) { alert(data.error); return; }
+          applyState(data);
+        }
+      } else {
+        const startVal = row.querySelector('.edit-start').value;
+        if (startVal && endVal) {
+          const day = rowDate(p) || todayISO();
+          const res = await fetch('/api/timer/set-duration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, date: day, start: startVal, end: endVal }),
+          });
+          const data = await res.json();
+          if (data.error) { alert(data.error); return; }
+          applyState(data);
+        }
+      }
+    }
+
+    editingId = null;
+    render();
+    refreshDayLog();
+  }
+
+  async function deleteEdit(id) {
+    if (!confirm('Supprimer définitivement ces heures ?')) return;
+    const p = projects.find((x) => x.id === id);
+    if (!p) { editingId = null; render(); return; }
+    const isRunning = id === runningId;
+    const day = isRunning ? todayISO() : (rowDate(p) || todayISO());
+    const res = await fetch('/api/timer/delete-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, date: day }),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    applyState(data);
+    editingId = null;
+    render();
+    refreshDayLog();
   }
 
   function escapeHtml(s) {
@@ -569,8 +937,29 @@
     if (!e.target.closest('.input-wrap')) closeSuggestions();
   });
 
+  editModeBtn.addEventListener('click', () => {
+    editMode = !editMode;
+    editingId = null;
+    editModeBtn.classList.toggle('active', editMode);
+    render();
+    if (editMode) refreshDayLog();
+  });
+
   loadState();
-  setInterval(render, 1000);
+  setInterval(() => { if (editMode) refreshDayLog(); }, 5000);
+  setInterval(() => {
+    // Pendant qu'une bulle est ouverte en édition, on ne reconstruit pas toute la liste (la saisie
+    // en cours serait perdue) : on se contente de garder le total du jour et le chrono du bandeau à jour.
+    if (editingId !== null) {
+      todayTotalEl.textContent = fmt(totalTodayAll());
+      if (runningId != null && editingId !== runningId) {
+        const timeEl = runningCardEl.querySelector('.running-time');
+        if (timeEl) timeEl.textContent = fmtClock(rowMinutes(projects.find((x) => x.id === runningId)));
+      }
+      return;
+    }
+    render();
+  }, 1000);
 </script>
 </body>
 </html>

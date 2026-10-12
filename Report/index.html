@@ -17,6 +17,126 @@
   }
 
   table { border-collapse: collapse; width: 100%; min-width: 560px; }
+
+  .icon-btn {
+    background: var(--card);
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    border: var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: var(--ink);
+    cursor: pointer;
+    flex: none;
+  }
+
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .icon-btn svg { width: 18px; height: 18px; }
+
+  .icon-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  /* --- Vue d'un jour : édition --- */
+
+  .day-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .day-heading { display: flex; align-items: baseline; gap: 10px; font-size: 14px; }
+
+  .day-heading strong { color: var(--strong); font-size: 17px; font-weight: 600; }
+
+  tr.day-row.editable { cursor: pointer; }
+
+  tr.day-row.editable:hover td { background: var(--bg); }
+
+  tr.day-row-editing td {
+    cursor: default;
+    text-align: left;
+    white-space: normal;
+    padding: 14px;
+  }
+
+  .edit-form { display: flex; flex-direction: column; gap: 10px; width: 100%; text-align: left; }
+
+  .edit-form-title { margin: 0; font-size: 14px; font-weight: 500; color: var(--strong); }
+
+  .edit-time-row { display: flex; gap: 10px; }
+
+  .edit-time-row label {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .edit-time-row input[type="time"] {
+    border: var(--border);
+    border-radius: 10px;
+    padding: 7px 8px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  .edit-or { font-size: 11px; opacity: 0.6; text-align: center; }
+
+  .edit-duration-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .edit-duration-wrap input {
+    border: var(--border);
+    border-radius: 10px;
+    padding: 7px 8px;
+    font-size: 14px;
+    font-family: inherit;
+    text-transform: none;
+    letter-spacing: normal;
+    color: var(--ink);
+    background: var(--bg);
+  }
+
+  .edit-hint { font-size: 11px; margin: 0; opacity: 0.7; }
+
+  .edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  .edit-actions button {
+    border: none;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .edit-save { background: var(--accent); color: var(--on-accent); }
+
+  .edit-cancel { background: var(--card); border: var(--border); color: var(--ink); }
+
+  .edit-delete {
+    background: none;
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    margin-right: auto;
+  }
 </style>
 </head>
 <body>
@@ -28,6 +148,15 @@
     <label>Du <input type="date" id="startDate"></label>
     <label>au <input type="date" id="endDate"></label>
     <button id="refreshBtn" type="button">Actualiser</button>
+    <label>Arrondir à <select id="roundUnit">
+      <option value="5">5 min</option>
+      <option value="10">10 min</option>
+      <option value="15" selected>15 min</option>
+      <option value="30">30 min</option>
+      <option value="60">60 min</option>
+    </select></label>
+    <button id="roundBtn" type="button">Arrondir</button>
+    <label><input type="checkbox" id="showArchived"> Afficher les archives</label>
   </div>
 
   <div class="table-wrap" id="reportWrap"></div>
@@ -40,11 +169,15 @@
   async function loadProjects() {
     const res = await fetch('/api/timer/state', { cache: 'no-store' });
     const state = await res.json();
+    applyState(state);
+  }
+
+  function applyState(state) {
     projects = state.projects;
   }
 
   function fmt(mins) {
-    mins = Math.round(mins);
+    mins = Math.round(mins || 0);
     if (mins <= 0) return '0m';
     const h = Math.floor(mins / 60);
     const m = mins % 60;
@@ -57,24 +190,44 @@
     return new Date(y, m - 1, d).toLocaleDateString('fr-CH', { weekday: 'short', day: 'numeric', month: 'short' });
   }
 
+  function fmtHHMM(d) {
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  // Durée -> heures décimales (accepte 1:30, 1h30, 1h, 2.5, "2,5") — même règle que dans Timer/ImportTimeSheet.
+  function parseDurationHours(s) {
+    s = (s || '').trim();
+    if (!s) return null;
+    let match;
+    if ((match = s.match(/^(\d+):(\d{2})$/))) return +match[1] + +match[2] / 60;
+    if ((match = s.match(/^(\d+)\s*h\s*(\d{1,2})?$/i))) return +match[1] + +(match[2] || 0) / 60;
+    if (/^\d+([.,]\d+)?$/.test(s)) return parseFloat(s.replace(',', '.'));
+    return null;
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
   function buildReport(startDate, endDate) {
     const cells = {};
+    const startedAtMap = {};
     const dayTotals = {};
     const projectTotals = {};
     let grandTotal = 0;
+    const showArchived = document.getElementById('showArchived').checked;
 
     for (const project of projects) {
-      for (const { date, minutes } of project.history) {
+      for (const { date, minutes, startedAt, archived } of project.history) {
         if (minutes <= 0) continue;
+        if (archived && !showArchived) continue;
         if (startDate && date < startDate) continue;
         if (endDate && date > endDate) continue;
 
         cells[date] ||= {};
         cells[date][project.id] = (cells[date][project.id] || 0) + minutes;
+        startedAtMap[date] ||= {};
+        startedAtMap[date][project.id] = startedAt || null;
         dayTotals[date] = (dayTotals[date] || 0) + minutes;
         projectTotals[project.id] = (projectTotals[project.id] || 0) + minutes;
         grandTotal += minutes;
@@ -84,16 +237,20 @@
     const days = Object.keys(cells).sort();
     const visibleProjects = projects.filter((p) => projectTotals[p.id]);
 
-    return { days, cells, dayTotals, projectTotals, grandTotal, visibleProjects };
+    return { days, cells, startedAtMap, dayTotals, projectTotals, grandTotal, visibleProjects };
   }
 
   let currentReport = null;
+  let dayEditMode = false;
+  let editingProjectId = null;
   const reportWrap = document.getElementById('reportWrap');
   const startInput = document.getElementById('startDate');
   const endInput = document.getElementById('endDate');
 
   function renderTable(report) {
     currentReport = report;
+    dayEditMode = false;
+    editingProjectId = null;
 
     if (!report.days.length) {
       reportWrap.innerHTML = `<p class="empty-state">Aucun temps enregistré sur cette période.</p>`;
@@ -126,28 +283,160 @@
     });
   }
 
+  // --- Vue d'un jour : seule vue où l'édition (durée par projet) est possible ---
   function renderDay(day) {
     const rows = currentReport.visibleProjects
-      .map((p) => ({ p, mins: currentReport.cells[day][p.id] || 0 }))
+      .map((p) => ({
+        p,
+        mins: (currentReport.cells[day] || {})[p.id] || 0,
+        startedAt: (currentReport.startedAtMap[day] || {})[p.id] || null,
+      }))
       .filter((row) => row.mins > 0)
-      .sort((a, b) => b.mins - a.mins)
-      .map((row) => `<tr><td>${escapeHtml(row.p.name)}</td><td><strong>${fmt(row.mins)}</strong></td></tr>`)
-      .join('');
+      .sort((a, b) => b.mins - a.mins);
+
+    const rowsHtml = rows.map((row) => renderDayRow(row, day)).join('');
 
     reportWrap.innerHTML = `
-      <table>
-        <thead><tr><th>${fmtDay(day)}</th><th>${fmt(currentReport.dayTotals[day])}</th></tr></thead>
-      </table>
+      <div class="day-toolbar">
+        <div class="day-heading">
+          <span>${fmtDay(day)}</span>
+          <strong>${fmt(currentReport.dayTotals[day] || 0)}</strong>
+        </div>
+        <button class="icon-btn ${dayEditMode ? 'active' : ''}" id="dayEditBtn" type="button" title="Éditer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/>
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+          </svg>
+        </button>
+      </div>
       <table>
         <thead><tr><th>Projet</th><th>Temps</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${rowsHtml}</tbody>
       </table>`;
+
+    reportWrap.querySelector('#dayEditBtn').addEventListener('click', () => {
+      dayEditMode = !dayEditMode;
+      editingProjectId = null;
+      renderDay(day);
+    });
+
+    if (dayEditMode) {
+      reportWrap.querySelectorAll('tr.day-row.editable[data-id]').forEach((tr) => {
+        tr.addEventListener('click', () => {
+          editingProjectId = Number(tr.dataset.id);
+          renderDay(day);
+        });
+      });
+      const editingRow = reportWrap.querySelector('tr.day-row-editing');
+      if (editingRow) {
+        const id = Number(editingRow.dataset.id);
+        editingRow.querySelector('.edit-cancel').addEventListener('click', () => {
+          editingProjectId = null;
+          renderDay(day);
+        });
+        editingRow.querySelector('.edit-save').addEventListener('click', () => saveDayEdit(id, day));
+        editingRow.querySelector('.edit-delete').addEventListener('click', () => deleteDayEdit(id, day));
+      }
+    }
 
     const backBtn = document.createElement('button');
     backBtn.className = 'back-to-table';
     backBtn.textContent = '← Retour au rapport';
     backBtn.addEventListener('click', () => { backBtn.remove(); renderTable(currentReport); });
     reportWrap.after(backBtn);
+  }
+
+  function renderDayRow(row, day) {
+    const { p, mins, startedAt } = row;
+    if (dayEditMode && editingProjectId === p.id) {
+      return renderDayEditRow(p, mins, startedAt);
+    }
+    const editableAttrs = dayEditMode ? ' class="day-row editable"' : '';
+    return `<tr${editableAttrs} data-id="${p.id}"><td>${escapeHtml(p.name)}</td><td><strong>${fmt(mins)}</strong></td></tr>`;
+  }
+
+  function renderDayEditRow(p, mins, startedAt) {
+    const knownStart = startedAt ? new Date(startedAt * 1000) : null;
+    const startVal = knownStart ? fmtHHMM(knownStart) : '';
+    const hint = knownStart
+      ? `Actuellement ${fmt(mins)}, débuté à ${fmtHHMM(knownStart)}`
+      : `Actuellement ${fmt(mins)} — heure de début inconnue`;
+    return `
+      <tr class="day-row-editing" data-id="${p.id}">
+        <td colspan="2">
+          <div class="edit-form">
+            <p class="edit-form-title">${escapeHtml(p.name)}</p>
+            <div class="edit-time-row">
+              <label>Début
+                <input class="edit-start" type="time" value="${startVal}">
+              </label>
+              <label>Fin
+                <input class="edit-end" type="time" value="">
+              </label>
+            </div>
+            <p class="edit-or">— ou, si l'heure de début est inconnue —</p>
+            <label class="edit-duration-wrap">Durée totale
+              <input class="edit-duration" type="text" placeholder="ex. 1h30, 1:30, 2.5">
+            </label>
+            <p class="edit-hint">${escapeHtml(hint)}</p>
+            <div class="edit-actions">
+              <button class="edit-delete" type="button">Supprimer</button>
+              <button class="edit-cancel" type="button">Annuler</button>
+              <button class="edit-save" type="button">Enregistrer</button>
+            </div>
+          </div>
+        </td>
+      </tr>`;
+  }
+
+  async function saveDayEdit(id, day) {
+    const row = reportWrap.querySelector(`tr.day-row-editing[data-id="${id}"]`);
+    if (!row) { editingProjectId = null; renderDay(day); return; }
+
+    const durationVal = row.querySelector('.edit-duration').value.trim();
+    let data;
+    if (durationVal) {
+      // Durée directe : ne demande pas l'heure de début, remplace juste le total du (projet, jour).
+      const hours = parseDurationHours(durationVal);
+      if (hours === null) { alert('Durée invalide (attendu 1h30, 1:30 ou 2.5)'); return; }
+      const res = await fetch('/api/timer/set-minutes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, date: day, minutes: hours * 60 }),
+      });
+      data = await res.json();
+    } else {
+      const startVal = row.querySelector('.edit-start').value;
+      const endVal = row.querySelector('.edit-end').value;
+      if (!startVal || !endVal) { alert('Indique Début et Fin, ou une durée totale.'); return; }
+      const res = await fetch('/api/timer/set-duration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, date: day, start: startVal, end: endVal }),
+      });
+      data = await res.json();
+    }
+    if (data.error) { alert(data.error); return; }
+    applyState(data);
+
+    editingProjectId = null;
+    currentReport = buildReport(startInput.value, endInput.value);
+    renderDay(day);
+  }
+
+  async function deleteDayEdit(id, day) {
+    if (!confirm('Supprimer définitivement ces heures ?')) return;
+    const res = await fetch('/api/timer/delete-entry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, date: day }),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    applyState(data);
+    editingProjectId = null;
+    currentReport = buildReport(startInput.value, endInput.value);
+    renderDay(day);
   }
 
   async function refresh() {
@@ -160,9 +449,128 @@
   endInput.value = today.toISOString().slice(0, 10);
   startInput.value = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().slice(0, 10);
 
+  async function roundTimes() {
+    const unit = document.getElementById('roundUnit').value;
+    const start = startInput.value;
+    const end = endInput.value;
+    if (!start || !end) { alert('Choisis une période (du / au).'); return; }
+
+    const res = await fetch('/api/timer/round/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start, end, unit: Number(unit) }),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+
+    renderRoundPreview(data.changes, data.dayTotals, start, end, Number(unit));
+  }
+
+  function minutesToHM(totalMinutes) {
+    const total = Math.max(0, Math.round(totalMinutes));
+    return { h: Math.floor(total / 60), m: total % 60 };
+  }
+
+  function rowMinutes(i) {
+    const h = Number(reportWrap.querySelector(`.round-after-h[data-index="${i}"]`).value) || 0;
+    const m = Number(reportWrap.querySelector(`.round-after-m[data-index="${i}"]`).value) || 0;
+    return h * 60 + m;
+  }
+
+  function recalcDayTotal(day, changes, dayBaseMinutes) {
+    let total = dayBaseMinutes[day] || 0;
+    changes.forEach((c, i) => { if (c.day === day) total += rowMinutes(i); });
+    const cell = reportWrap.querySelector(`.round-day-total[data-day="${day}"]`);
+    if (cell) {
+      const { h, m } = minutesToHM(total);
+      cell.textContent = `${h}h${m}m`;
+    }
+  }
+
+  function renderRoundPreview(changes, dayTotals, start, end, unit) {
+    if (!changes.length) {
+      reportWrap.innerHTML = `<p class="empty-state">Rien à arrondir du ${start} au ${end} à ${unit} minutes : tout est déjà sur ce pas.</p>`;
+      const backBtn = document.createElement('button');
+      backBtn.className = 'back-to-table';
+      backBtn.textContent = '← Retour au rapport';
+      backBtn.addEventListener('click', () => { backBtn.remove(); refresh(); });
+      reportWrap.after(backBtn);
+      return;
+    }
+
+    // Part du total de chaque jour qui vient d'entrées non listées ici (déjà sur le bon pas) :
+    // total du jour (calculé côté serveur) moins la somme des "après" des lignes affichées.
+    const dayBaseMinutes = {};
+    for (const day of Object.keys(dayTotals)) {
+      const changedSum = changes.filter((c) => c.day === day).reduce((sum, c) => sum + c.afterMinutes, 0);
+      dayBaseMinutes[day] = dayTotals[day] - changedSum;
+    }
+
+    let rowsHtml = '';
+    changes.forEach((c, i) => {
+      const { h, m } = minutesToHM(c.afterMinutes);
+      rowsHtml += `
+        <tr data-project-id="${c.projectId}" data-day="${c.day}">
+          <td>${fmtDay(c.day)}</td>
+          <td>${escapeHtml(c.projectName)}</td>
+          <td>${fmt(c.beforeMinutes)}</td>
+          <td>
+            <input class="round-after-h" type="number" min="0" step="1" data-index="${i}" value="${h}" style="width:48px;">h
+            <input class="round-after-m" type="number" min="0" max="59" step="1" data-index="${i}" value="${m}" style="width:48px;">m
+          </td>
+        </tr>`;
+      const isLastOfDay = i === changes.length - 1 || changes[i + 1].day !== c.day;
+      if (isLastOfDay) {
+        const { h: th, m: tm } = minutesToHM(dayTotals[c.day] || 0);
+        rowsHtml += `
+          <tr class="round-day-total-row">
+            <td colspan="3" style="text-align:right;"><strong>Total ${fmtDay(c.day)}</strong></td>
+            <td><strong class="round-day-total" data-day="${c.day}">${th}h${tm}m</strong></td>
+          </tr>`;
+      }
+    });
+
+    reportWrap.innerHTML = `
+      <p>${changes.length} entrée(s) seraient arrondies à ${unit} minutes (du ${start} au ${end}). La colonne "Après" est modifiable à la main avant de confirmer.</p>
+      <table>
+        <thead><tr><th>Jour</th><th>Projet</th><th>Avant</th><th>Après</th></tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <div class="edit-actions" style="margin-top:12px;">
+        <button class="edit-cancel" id="roundCancelBtn" type="button">Annuler</button>
+        <button class="edit-save" id="roundConfirmBtn" type="button">Confirmer l'arrondi</button>
+      </div>`;
+
+    reportWrap.querySelectorAll('.round-after-h, .round-after-m').forEach((input) => {
+      input.addEventListener('input', () => {
+        const i = Number(input.dataset.index);
+        recalcDayTotal(changes[i].day, changes, dayBaseMinutes);
+      });
+    });
+
+    document.getElementById('roundCancelBtn').addEventListener('click', refresh);
+    document.getElementById('roundConfirmBtn').addEventListener('click', () => applyRound(changes, start, end));
+  }
+
+  async function applyRound(changes, start, end) {
+    const finalChanges = changes.map((c, i) => ({ projectId: c.projectId, day: c.day, afterMinutes: rowMinutes(i) }));
+
+    const res = await fetch('/api/timer/round/apply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ changes: finalChanges }),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    applyState(data);
+    renderTable(buildReport(start, end));
+  }
+
   startInput.addEventListener('change', refresh);
   endInput.addEventListener('change', refresh);
   document.getElementById('refreshBtn').addEventListener('click', refresh);
+  document.getElementById('roundBtn').addEventListener('click', roundTimes);
+  document.getElementById('showArchived').addEventListener('change', refresh);
 
   refresh();
 </script>

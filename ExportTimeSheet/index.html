@@ -99,6 +99,18 @@
 
   .row.warn .tag { color: var(--accent); }
 
+  .link-btn {
+    font: inherit;
+    font-size: 11.5px;
+    color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
+    margin-left: 4px;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+
   .total {
     padding: 10px 14px;
     font-size: 13px;
@@ -192,6 +204,11 @@
     Ignorer les tâches sans numéro d'affaire
   </label>
 
+  <label class="option">
+    <input type="checkbox" id="ignoreArchived" checked>
+    Ignorer les heures déjà exportées
+  </label>
+
   <div id="runningNotice" class="notice" hidden>Un timer tourne : son temps n'est pas inclus tant qu'il n'est pas arrêté.</div>
 
   <div class="list" id="list"></div>
@@ -209,13 +226,24 @@
   const startInput = $('startDate');
   const endInput = $('endDate');
   const ignoreInput = $('ignoreNoNumber');
+  const ignoreArchivedInput = $('ignoreArchived');
 
   // Nom valide = numéro d'affaire (chiffres) suivi de "_". Même règle que le serveur.
   const hasJobNumber = (name) => /^\d+_/.test(name.trim());
 
-  let allLines = [];     // toutes les lignes du Timer : {name, date, minutes}
+  // Numéro en tête du nom même sans "_" ensuite (ex. "20260186. Hotel Roc...") : permet de proposer
+  // un rattachement au projet Odoo correspondant même quand hasJobNumber() est faux.
+  const looseNumber = (name) => {
+    const m = name.trim().match(/^(\d+)/);
+    return m ? m[1] : null;
+  };
+
+  let allLines = [];     // toutes les lignes du Timer : {id, name, date, minutes, archived}
   const unchecked = new Set();   // clés des lignes décochées (tout est coché par défaut)
   const lineKey = (l) => `${l.date}|${l.name}`;
+
+  // Rattachement par numéro pour les lignes sans "_" : id de projet -> état de la recherche Odoo.
+  const matches = new Map();
 
   function todayISO() {
     const d = new Date();
@@ -247,11 +275,60 @@
   }
 
   // Une ligne sans numéro n'est pas sélectionnable quand « Ignorer » est coché.
-  const isSelectable = (l) => !(ignoreInput.checked && !hasJobNumber(l.name));
+  const isSelectable = (l) =>
+    !(ignoreInput.checked && !hasJobNumber(l.name)) && !(ignoreArchivedInput.checked && l.archived);
 
   // Lignes qui seront réellement envoyées (export Odoo et CSV) : sélectionnables ET cochées.
   function linesToExport() {
     return selectedLines().filter((l) => isSelectable(l) && !unchecked.has(lineKey(l)));
+  }
+
+  // Affiche l'état de recherche/rattachement Odoo pour une ligne sans "_" après le numéro.
+  function matchHtml(l) {
+    const number = looseNumber(l.name);
+    if (!number) return '';
+    const state = matches.get(l.id);
+    if (!state) {
+      return `<span class="tag"><button type="button" class="link-btn find-match" data-id="${l.id}" data-number="${esc(number)}" style="margin-left:0;">Chercher le projet n° ${esc(number)} dans Odoo</button></span>`;
+    }
+    if (state.status === 'loading') return `<span class="tag">Recherche du n° ${esc(number)}…</span>`;
+    if (state.status === 'none') return `<span class="tag">Aucun projet Odoo avec le n° ${esc(number)}</span>`;
+    if (state.status === 'multiple') {
+      return `<span class="tag">Plusieurs projets avec le n° ${esc(number)} : ${state.projects.map((p) => esc(p.name)).join(' / ')}</span>`;
+    }
+    if (state.status === 'error') return `<span class="tag">Erreur : ${esc(state.message)}</span>`;
+    // found
+    return `<span class="tag">Trouvé : ${esc(state.project.name)}
+      <button type="button" class="link-btn apply-match" data-id="${l.id}" data-name="${esc(state.project.name)}">Renommer</button></span>`;
+  }
+
+  async function findMatch(id, number) {
+    matches.set(id, { status: 'loading' });
+    render();
+    try {
+      const res = await fetch(`/api/odoo/projects/by-number?number=${encodeURIComponent(number)}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (data.length === 0) matches.set(id, { status: 'none' });
+      else if (data.length === 1) matches.set(id, { status: 'found', project: data[0] });
+      else matches.set(id, { status: 'multiple', projects: data });
+    } catch (err) {
+      matches.set(id, { status: 'error', message: err.message });
+    }
+    render();
+  }
+
+  async function applyMatch(id, name) {
+    if (!confirm(`Renommer ce projet du Timer en "${name}" ?\nToutes ses entrées (toutes dates) seront rattachées à ce nom.`)) return;
+    const res = await fetch('/api/timer/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, name }),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    matches.delete(id);
+    await load();
   }
 
   function render() {
@@ -269,9 +346,15 @@
         const selectableLine = isSelectable(l);
         const checked = selectableLine && !unchecked.has(lineKey(l));
         const noNumber = !hasJobNumber(l.name);
-        const cls = [selectableLine ? '' : 'skipped', checked ? '' : 'off', noNumber && selectableLine ? 'warn' : ''].join(' ');
-        const tag = noNumber ? `<span class="tag">${selectableLine ? 'erreur : sans numéro' : 'ignorée : sans numéro'}</span>` : '';
-        return `<label class="row pick ${cls}"><input type="checkbox" data-key="${esc(lineKey(l))}" ${checked ? 'checked' : ''} ${selectableLine ? '' : 'disabled'}><span class="date">${esc(l.date)}</span><span class="name">${esc(l.name)}${tag}</span><span class="hours">${fmtHM(l.minutes)}</span></label>`;
+        const cls = [selectableLine ? '' : 'skipped', checked ? '' : 'off', (noNumber || l.archived) && selectableLine ? 'warn' : ''].join(' ');
+        const numberTag = noNumber
+          ? `<span class="tag">${ignoreInput.checked ? 'ignorée : sans numéro' : 'erreur : sans numéro'}</span>`
+          : '';
+        const archivedTag = l.archived
+          ? `<span class="tag">${ignoreArchivedInput.checked ? 'ignorée : déjà exportée' : 'déjà exportée'}</span>`
+          : '';
+        const matchTag = noNumber ? matchHtml(l) : '';
+        return `<label class="row pick ${cls}"><input type="checkbox" data-key="${esc(lineKey(l))}" ${checked ? 'checked' : ''} ${selectableLine ? '' : 'disabled'}><span class="date">${esc(l.date)}</span><span class="name">${esc(l.name)}${numberTag}${archivedTag}${matchTag}</span><span class="hours">${fmtHM(l.minutes)}</span></label>`;
       }).join('');
       list.innerHTML = head + rows + `<div class="total">${plural(exported.length, 'ligne', 'lignes')} à exporter · ${fmtHM(totalMin)}</div>`;
 
@@ -299,10 +382,25 @@
     render();
   });
 
+  // Boutons "Chercher"/"Renommer" : délégation, la liste est re-rendue à chaque changement.
+  $('list').addEventListener('click', (e) => {
+    const findBtn = e.target.closest('.find-match');
+    if (findBtn) {
+      e.preventDefault();
+      findMatch(Number(findBtn.dataset.id), findBtn.dataset.number);
+      return;
+    }
+    const applyBtn = e.target.closest('.apply-match');
+    if (applyBtn) {
+      e.preventDefault();
+      applyMatch(Number(applyBtn.dataset.id), applyBtn.dataset.name);
+    }
+  });
+
   async function load() {
     const res = await fetch('/api/timer/state', { cache: 'no-store' });
     const state = await res.json();
-    allLines = state.projects.flatMap((p) => p.history.map((h) => ({ name: p.name, date: h.date, minutes: h.minutes })));
+    allLines = state.projects.flatMap((p) => p.history.map((h) => ({ id: p.id, name: p.name, date: h.date, minutes: h.minutes, archived: !!h.archived })));
     $('runningNotice').hidden = !state.running;
     render();
   }
@@ -384,6 +482,7 @@
   startInput.addEventListener('change', render);
   endInput.addEventListener('change', render);
   ignoreInput.addEventListener('change', render);
+  ignoreArchivedInput.addEventListener('change', render);
   $('csvBtn').addEventListener('click', exportCsv);
   $('odooBtn').addEventListener('click', exportToOdoo);
   load();

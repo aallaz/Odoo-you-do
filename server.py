@@ -55,7 +55,7 @@ sys.path.insert(0, str(ROOT / "ImportTimeSheet"))
 from heure_sortie import fetch_today_attendance  # noqa: E402
 from odoo_attendance import fetch_daily_attendance  # noqa: E402
 from odoo_export import export_entries  # noqa: E402
-from odoo_projects import OdooError, search_projects  # noqa: E402
+from odoo_projects import OdooError, find_projects, search_projects  # noqa: E402
 from xlsx_reader import read_xlsx  # noqa: E402
 import timer_store  # noqa: E402
 
@@ -102,8 +102,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/timer/state":
             self._send_json(timer_store.get_state())
             return
+        if path == "/api/timer/log":
+            day = (parse_qs(query).get("day") or [None])[0]
+            self._send_json(timer_store.get_day_log(day))
+            return
         if path == "/api/odoo/projects":
             self._serve_odoo_projects(parse_qs(query))
+            return
+        if path == "/api/odoo/projects/by-number":
+            self._serve_odoo_project_by_number(parse_qs(query))
             return
 
         self._serve_static(path)
@@ -129,6 +136,98 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/timer/stop":
             self._send_json(timer_store.stop_project())
+            return
+
+        if path == "/api/timer/rename":
+            try:
+                state = timer_store.rename_project(int(payload.get("id")), payload.get("name", ""))
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/set-start":
+            try:
+                state = timer_store.set_running_start(payload.get("start", ""))
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/stop-at":
+            try:
+                state = timer_store.stop_running_at(payload.get("end", ""))
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/set-minutes":
+            try:
+                state = timer_store.set_entry_minutes(
+                    int(payload.get("id")),
+                    str(payload.get("date")),
+                    float(payload.get("minutes")),
+                )
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/set-duration":
+            try:
+                state = timer_store.set_entry_range(
+                    int(payload.get("id")),
+                    str(payload.get("date")),
+                    payload.get("start", ""),
+                    payload.get("end", ""),
+                )
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/round/preview":
+            start = str(payload.get("start"))
+            end = str(payload.get("end"))
+            day_caps = self._fetch_attendance_caps(start, end)
+            try:
+                preview = timer_store.preview_round_entries(start, end, int(payload.get("unit")), day_caps)
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(preview)
+            return
+
+        if path == "/api/timer/round/apply":
+            try:
+                changes = [
+                    {"project_id": c["projectId"], "day": c["day"], "minutes": c["afterMinutes"]}
+                    for c in payload["changes"]
+                ]
+            except (KeyError, TypeError):
+                self._send_json({"error": "Format invalide : changes = [{projectId, day, afterMinutes}, ...] attendu"}, status=400)
+                return
+            try:
+                state = timer_store.apply_round_changes(changes)
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/delete-entry":
+            try:
+                state = timer_store.delete_entry(int(payload.get("id")), str(payload.get("date")))
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
             return
 
         if path == "/api/export/odoo":
@@ -193,6 +292,32 @@ class Handler(BaseHTTPRequestHandler):
 
         self._send_json(records, status=200)
 
+    def _fetch_attendance_caps(self, start, end):
+        """
+        {jour: minutes pointées} pour [start, end], pour servir de référence « heures de la journée »
+        à l'arrondi — plus fiable que la somme du Timer, qui peut sous-compter le temps réellement
+        présent. Dégrade silencieusement vers None (pas de référence Odoo) si les identifiants
+        manquent, les dates sont invalides, ou Odoo est inaccessible : l'arrondi retombe alors sur la
+        somme du Timer pour ces jours (voir `timer_store._compute_round_changes`).
+        """
+        url = os.getenv("ODOO_URL")
+        db = os.getenv("ODOO_DB", "")
+        api_key = os.getenv("ODOO_API_KEY")
+        employee_id = os.getenv("ODOO_EMPLOYEE_ID")
+        if not (url and api_key and employee_id):
+            return None
+
+        try:
+            start_date = date.fromisoformat(start)
+            end_date = date.fromisoformat(end)
+            if end_date < start_date:
+                return None
+            days = fetch_daily_attendance(url, db, api_key, int(employee_id), start_date, end_date)
+        except (ValueError, OdooError, requests.RequestException):
+            return None
+
+        return {d["date"]: d["minutes"] for d in days}
+
     def _serve_attendance(self, query):
         """Heures de pointage Odoo par jour (?start=AAAA-MM-JJ&end=AAAA-MM-JJ). Lecture seule."""
         url = os.getenv("ODOO_URL")
@@ -255,7 +380,45 @@ class Handler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Erreur réseau : {exc}"}, status=502)
             return
 
+        # Marque comme archivées (dans le Timer) les lignes effectivement envoyées à Odoo, pour que
+        # Report puisse les masquer par défaut sans rien supprimer.
+        if report["imported"]:
+            timer_store.mark_entries_archived(
+                [{"name": i["name"], "date": i["date"]} for i in report["imported"]]
+            )
+
         self._send_json(report)
+
+    def _serve_odoo_project_by_number(self, query):
+        """
+        Projet(s) Odoo dont le nom commence par "<numéro>_" (?number=...). Pour un nom du Timer qui a
+        un numéro d'affaire en tête mais pas suivi d'un "_" (ex. "20260186. Hotel Roc..."), ça permet
+        de retrouver quand même le projet Odoo correspondant et de proposer un renommage.
+        """
+        url = os.getenv("ODOO_URL")
+        db = os.getenv("ODOO_DB", "")
+        api_key = os.getenv("ODOO_API_KEY")
+
+        missing = [name for name, val in [("ODOO_URL", url), ("ODOO_API_KEY", api_key)] if not val]
+        if missing:
+            self._send_json({"error": f"Variables manquantes dans le .env : {', '.join(missing)}"}, status=500)
+            return
+
+        number = (query.get("number") or [""])[0].strip()
+        if not number.isdigit():
+            self._send_json({"error": "Numéro d'affaire invalide"}, status=400)
+            return
+
+        try:
+            projects = find_projects(url, db, api_key, number)
+        except OdooError as exc:
+            self._send_json({"error": str(exc)}, status=502)
+            return
+        except requests.RequestException as exc:
+            self._send_json({"error": f"Erreur réseau : {exc}"}, status=502)
+            return
+
+        self._send_json(projects)
 
     def _serve_odoo_projects(self, query):
         """Recherche de projets Odoo par nom (?q=...), pour rattacher un nom sans numéro d'affaire."""

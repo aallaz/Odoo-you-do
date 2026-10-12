@@ -22,5 +22,4 @@
 - [ ] Un xlsx multi-onglets lit un onglet à la fois ; un import ne mélange pas les onglets
 - [ ] Sélection de plusieurs plages de lignes (ex. 8 à 12 et 20 à 25) : une seule plage aujourd'hui
 - [ ] Un plugin Super Productivity pourrait envoyer les temps directement au Timer, sans fichier
-- [ ] `Timer/timer.db` n'est pas versionné (ignoré par git) : le sauvegarder à la main avant les gros imports
-- [ ] Packager avec PyInstaller (un exécutable par système : Windows, macOS, Linux) pour ne plus exiger Python
+- [ ] Toujours sauvegarder `Timer/timer.db` avant les gros imports (non versionné, exclu par `.gitignore`)

@@ -18,7 +18,7 @@ Sous Windows, double-cliquer `lancer.vbs` fait la même chose sans fenêtre de c
 
 Pour lancer le serveur seul : `python server.py` (http://127.0.0.1:8000).
 
-Fichier `.env` à la racine :
+Copier `.env.example` en `.env` à la racine et compléter :
 
 ```
 ODOO_URL=https://...
@@ -27,12 +27,12 @@ ODOO_API_KEY=...
 ODOO_EMPLOYEE_ID=...
 ```
 
-Le `.env` contient une clé API : ne pas le partager ni le versionner.
+Le `.env` contient une clé API : ne pas le partager ni le versionner (`.gitignore` l'exclut déjà).
 
-## Statut
+## Données locales non versionnées
 
-Projet en cours de test. À faire plus tard : packager avec PyInstaller (un exécutable par système,
-construit sur chaque système) pour distribuer sans installer Python.
+`Odoo.zip` et `tasks*.csv` à la racine sont des sauvegardes/exports personnels (vraies heures, vrais noms de
+projets) : ils restent sur le disque mais sont exclus par `.gitignore`, à ne jamais ajouter au dépôt.
 
 ## Style
 
@@ -95,7 +95,19 @@ Les fichiers `import-test.xlsx` et `import-test.csv` à la racine sont des exemp
 | Méthode | Route | Rôle |
 |---|---|---|
 | GET | `/api/timer/state` | État du Timer (projets, historique, timer en cours) |
+| GET | `/api/timer/log?day=AAAA-MM-JJ` | Journal in/out de la journée (tous projets), triés par heure de début ; `day` par défaut = aujourd'hui |
 | POST | `/api/timer/start`, `/api/timer/stop` | Démarre / arrête le timer |
+| POST | `/api/timer/set-start` | `{start: "HH:MM"}` → redéfinit le début du chrono en cours sans l'arrêter |
+| POST | `/api/timer/rename` | `{id, name}` → renomme un projet du Timer |
+| POST | `/api/timer/stop-at` | `{end: "HH:MM"}` → arrête le timer en cours à une heure choisie plutôt que "maintenant" |
+| POST | `/api/timer/set-duration` | `{id, date, start: "HH:MM", end: "HH:MM"}` → remplace la durée du (projet, jour) par fin − début |
+| POST | `/api/timer/set-minutes` | `{id, date, minutes}` → remplace directement la durée du (projet, jour), sans début/fin |
+| POST | `/api/timer/delete-entry` | `{id, date}` → supprime définitivement l'entrée (durée + journal in/out) du (projet, jour) ; refusé si ce projet est le chrono en cours et que `date` est aujourd'hui |
+
+`time_entries` garde aussi `first_start_at` (l'heure réelle du premier démarrage du jour, remplie automatiquement
+à l'arrêt du chrono, ou explicitement par `/api/timer/set-duration`) : l'édition d'une bulle déjà arrêtée peut
+donc pré-remplir Début même après coup. Elle est vidée par `/api/timer/set-minutes`, puisqu'on vient de fixer
+une durée sans référence d'heure.
 | POST | `/api/export/odoo` | `{entries: [{name, date, hours}]}` → lignes de feuille de temps Odoo |
 | POST | `/api/import/timer` | `{entries, mode: "replace" \| "add"}` → écrit dans le Timer |
 | POST | `/api/import/parse-xlsx` | `{data: base64, sheet}` → grille de texte, une ligne par ligne Excel |
