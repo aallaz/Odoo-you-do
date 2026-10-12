@@ -19,7 +19,7 @@ import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-WIN_W, WIN_H = 980, 820
+WIN_W, WIN_H = 980, 550
 
 
 def is_up(url):
