@@ -10,9 +10,12 @@ import math
 import sqlite3
 import time
 from datetime import date, datetime, timedelta
-from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent / "timer.db"
+import paths
+
+# A côté de l'exécutable (ou du script) : doit survivre d'un lancement à l'autre, jamais embarqué.
+DB_PATH = paths.data_root() / "Timer" / "timer.db"
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 def get_connection():

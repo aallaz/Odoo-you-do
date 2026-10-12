@@ -23,8 +23,9 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-INI_PATH = ROOT / "launcher.ini"
+import paths
+
+INI_PATH = paths.data_root() / "launcher.ini"
 DEFAULT_WIN_W, DEFAULT_WIN_H = 980, 550
 
 
@@ -51,8 +52,16 @@ def is_up(url):
 
 
 def start_server(port):
-    cmd = [sys.executable, str(ROOT / "server.py"), "--port", str(port)]
-    kwargs = {"cwd": str(ROOT), "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if getattr(sys, "frozen", False):
+        # Exécutable PyInstaller : pas de python.exe séparable, on se relance soi-même avec un
+        # indicateur caché qui bascule main() vers server.main() au lieu d'ouvrir le navigateur.
+        cmd = [sys.executable, "--serve", "--port", str(port)]
+    else:
+        cmd = [sys.executable, str(paths.assets_root() / "server.py"), "--port", str(port)]
+    kwargs = {
+        "cwd": str(paths.data_root()),
+        "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+    }
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW | subprocess.DETACHED_PROCESS
     else:
@@ -121,7 +130,17 @@ def force_window_geometry_windows(width, height, title_contains="Accueil", timeo
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--serve", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+
+    if args.serve:
+        # Relancé par start_server() dans l'exécutable figé : devient le serveur lui-même.
+        import server
+
+        sys.argv = ["server.py", "--port", str(args.port)]
+        server.main()
+        return
+
     url = f"http://127.0.0.1:{args.port}/"
     win_w, win_h = load_window_size()
 

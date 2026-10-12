@@ -23,3 +23,5 @@
 - [ ] Sélection de plusieurs plages de lignes (ex. 8 à 12 et 20 à 25) : une seule plage aujourd'hui
 - [ ] Un plugin Super Productivity pourrait envoyer les temps directement au Timer, sans fichier
 - [ ] Toujours sauvegarder `Timer/timer.db` avant les gros imports (non versionné, exclu par `.gitignore`)
+- [ ] Exécutable macOS : à construire sur un Mac (PyInstaller ne cross-compile pas), ou via une
+      pipeline GitHub Actions à mettre en place. L'exe Windows existe déjà (`build_exe.py`).

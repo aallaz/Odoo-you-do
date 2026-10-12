@@ -11,3 +11,9 @@ __pycache__/
 # Sauvegardes et exports personnels (noms de projets, heures réelles)
 Odoo.zip
 tasks*.csv
+
+# Build PyInstaller (voir build_exe.py) : regenere, pas verse
+build/
+dist/
+*.spec
+_assets/

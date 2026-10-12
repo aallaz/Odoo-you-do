@@ -29,6 +29,20 @@ ODOO_EMPLOYEE_ID=...
 
 Le `.env` contient une clé API : ne pas le partager ni le versionner (`.gitignore` l'exclut déjà).
 
+## Exécutable Windows (sans Python)
+
+Pour quelqu'un qui n'a pas Python installé : un `.exe` autonome se construit avec PyInstaller.
+
+```bash
+pip install -r requirements-build.txt
+python build_exe.py            # produit dist/OdooYouDo.exe
+```
+
+À distribuer : `dist/OdooYouDo.exe` + un `.env` (voir `.env.example`) placé **à côté** de l'exe
+(jamais embarqué dans l'exécutable). Au premier lancement, l'exe crée à côté de lui `_assets/`
+(pages embarquées, copiées une fois), `Timer/timer.db` et `launcher.ini` — comme en mode source.
+macOS : PyInstaller doit compiler sur un Mac, pas encore mis en place.
+
 ## Données locales non versionnées
 
 `Odoo.zip` et `tasks*.csv` à la racine sont des sauvegardes/exports personnels (vraies heures, vrais noms de

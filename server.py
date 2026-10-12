@@ -45,7 +45,10 @@ from urllib.parse import parse_qs
 import requests
 from dotenv import load_dotenv
 
-ROOT = Path(__file__).resolve().parent
+import paths
+
+ROOT = paths.assets_root()  # pages/scripts embarqués (lecture seule, utilisé plus bas pour APPS)
+DATA_ROOT = paths.data_root()  # .env et timer.db : à côté de l'exécutable, jamais embarqués
 
 sys.path.insert(0, str(ROOT / "GoHome"))
 sys.path.insert(0, str(ROOT / "Timer"))
@@ -59,7 +62,7 @@ from odoo_projects import OdooError, find_projects, search_projects  # noqa: E40
 from xlsx_reader import read_xlsx  # noqa: E402
 import timer_store  # noqa: E402
 
-load_dotenv(ROOT / ".env")
+load_dotenv(DATA_ROOT / ".env")
 
 timer_store.init_db()
 # Données de départ demandées : idempotent (n'ajoute rien si déjà présent).
