@@ -22,6 +22,15 @@
 - [ ] Un xlsx multi-onglets lit un onglet à la fois ; un import ne mélange pas les onglets
 - [ ] Sélection de plusieurs plages de lignes (ex. 8 à 12 et 20 à 25) : une seule plage aujourd'hui
 - [ ] Un plugin Super Productivity pourrait envoyer les temps directement au Timer, sans fichier
-- [ ] Toujours sauvegarder `Timer/timer.db` avant les gros imports (non versionné, exclu par `.gitignore`)
-- [ ] Exécutable macOS : à construire sur un Mac (PyInstaller ne cross-compile pas), ou via une
-      pipeline GitHub Actions à mettre en place. L'exe Windows existe déjà (`build_exe.py`).
+- [x] Sauvegarde de `Timer/timer.db` avant les gros imports : automatique maintenant (une copie par
+      jour dans `Timer/backups/`, voir README section « Sauvegarde automatique du Timer ») — reste
+      un filet de sécurité local (même disque), pas une vraie sauvegarde externe
+- [x] Exécutable macOS : pipeline GitHub Actions en place (`.github/workflows/build.yml`), build sur
+      windows-latest + macos-latest. L'app macOS n'est pas signée (Gatekeeper bloque le premier
+      lancement, voir README) — signature/notarisation Apple à envisager si ça gêne en pratique.
+
+## Report : édition par jour (sessions)
+- [ ] Une entrée déjà archivée (exportée vers Odoo) peut être supprimée en silence si son jour est
+      vidé entièrement via les nouveaux éditeurs « Par projet » / « Par heure » — même comportement
+      que le bouton Supprimer existant, mais à surveiller si ça arrive en pratique (envisager une
+      confirmation spécifique aux jours archivés)

@@ -17,6 +17,9 @@ import paths
 DB_PATH = paths.data_root() / "Timer" / "timer.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+BACKUP_DIR = DB_PATH.parent / "backups"
+BACKUP_KEEP_DAYS = 30  # une édition malheureuse peut passer inaperçue plusieurs jours
+
 
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
@@ -70,6 +73,37 @@ def init_db():
         conn.execute("ALTER TABLE time_entries ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     conn.close()
+
+
+def backup_now():
+    """Copie timer.db vers backups/timer-AAAA-MM-JJ.db (une par jour, écrasée si déjà faite
+    aujourd'hui), et ne garde que les BACKUP_KEEP_DAYS plus récentes. Appelé au démarrage du
+    serveur et une fois par heure (voir server.py) — un filet de sécurité local après une édition
+    malheureuse, pas une vraie sauvegarde externe (même disque que la base elle-même).
+
+    Utilise l'API de sauvegarde SQLite (pas une simple copie de fichier) : correcte même si la base
+    est en cours d'écriture au moment où ça tourne.
+    """
+    if not DB_PATH.exists():
+        return
+
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    dest = BACKUP_DIR / f"timer-{date.today().isoformat()}.db"
+
+    src = sqlite3.connect(DB_PATH)
+    try:
+        dest_conn = sqlite3.connect(dest)
+        try:
+            src.backup(dest_conn)
+        finally:
+            dest_conn.close()
+    finally:
+        src.close()
+
+    cutoff = time.time() - BACKUP_KEEP_DAYS * 86400
+    for old in BACKUP_DIR.glob("timer-*.db"):
+        if old.stat().st_mtime < cutoff:
+            old.unlink()
 
 
 def get_or_create_project(conn, name):
@@ -646,6 +680,159 @@ def delete_entry(project_id, day):
 
         conn.execute("DELETE FROM time_entries WHERE project_id = ? AND day = ?", (project_id, day))
         conn.execute("DELETE FROM session_log WHERE project_id = ? AND day = ?", (project_id, day))
+        conn.commit()
+        return build_state(conn)
+    finally:
+        conn.close()
+
+
+def _tracked_seconds(conn, project_id, day):
+    """Secondes couvertes par des sessions closes du journal in/out, pour un (projet, jour)."""
+    row = conn.execute(
+        "SELECT COALESCE(SUM(end_at - start_at), 0) AS s FROM session_log "
+        "WHERE project_id = ? AND day = ? AND end_at IS NOT NULL",
+        (project_id, day),
+    ).fetchone()
+    return row["s"]
+
+
+def _untracked_surplus(conn, project_id, day):
+    """Secondes déjà enregistrées pour ce (projet, jour) mais SANS session correspondante dans le
+    journal (arrondi via /round/apply, saisie d'une durée totale sans horaire, import...). Éditer le
+    journal in/out ne doit jamais faire disparaître ce surplus en silence : voir set_day_sessions et
+    set_day_sessions_by_time, qui le reportent tel quel sur le nouveau total."""
+    entry = conn.execute(
+        "SELECT seconds FROM time_entries WHERE project_id = ? AND day = ?", (project_id, day)
+    ).fetchone()
+    total = entry["seconds"] if entry else 0
+    return max(0, total - _tracked_seconds(conn, project_id, day))
+
+
+def _parse_session_range(day_date, start_hhmm, end_hhmm):
+    """Convertit une plage "HH:MM" -> "HH:MM" en (start_at, end_at) epoch. Refuse une plage nulle
+    (début = fin) : ligne dupliquée ou faute de frappe, jamais une vraie session de 24h voulue."""
+    sh, sm = _parse_hhmm(start_hhmm)
+    eh, em = _parse_hhmm(end_hhmm)
+    start_minutes = sh * 60 + sm
+    end_minutes = eh * 60 + em
+    if end_minutes == start_minutes:
+        raise ValueError(f"Plage nulle (début = fin) : {start_hhmm}-{end_hhmm}")
+    if end_minutes < start_minutes:
+        end_minutes += 24 * 60  # passage de minuit
+    start_at = datetime.combine(day_date, datetime.min.time()).replace(hour=sh, minute=sm).timestamp()
+    end_at = start_at + (end_minutes - start_minutes) * 60
+    return start_at, end_at
+
+
+def _replace_project_day_sessions(conn, project_id, day, parsed_ranges):
+    """Remplace les sessions d'un (projet, jour) par `parsed_ranges` ([(start_at, end_at), ...]), en
+    préservant le surplus non détaillé en session (voir `_untracked_surplus`). Met à jour
+    `time_entries` (et le supprime si le total retombe à 0) — ne touche pas `session_log` pour les
+    autres jours/projets, ni les tables d'archivage/arrondi."""
+    surplus = _untracked_surplus(conn, project_id, day)
+
+    conn.execute("DELETE FROM session_log WHERE project_id = ? AND day = ?", (project_id, day))
+    tracked_seconds = 0
+    first_start = None
+    for start_at, end_at in sorted(parsed_ranges):
+        conn.execute(
+            "INSERT INTO session_log (project_id, day, start_at, end_at) VALUES (?, ?, ?, ?)",
+            (project_id, day, start_at, end_at),
+        )
+        tracked_seconds += end_at - start_at
+        if first_start is None:
+            first_start = start_at
+
+    total_seconds = tracked_seconds + surplus
+    if total_seconds <= 0:
+        conn.execute("DELETE FROM time_entries WHERE project_id = ? AND day = ?", (project_id, day))
+    else:
+        conn.execute(
+            """
+            INSERT INTO time_entries (project_id, day, seconds, first_start_at) VALUES (?, ?, ?, ?)
+            ON CONFLICT(project_id, day) DO UPDATE SET seconds = excluded.seconds, first_start_at = excluded.first_start_at
+            """,
+            (project_id, day, int(round(total_seconds)), first_start),
+        )
+
+
+def set_day_sessions(project_id, day, sessions):
+    """Remplace les sessions enregistrées d'un (projet, jour) par la liste `sessions` fournie
+    ([{"start": "HH:MM", "end": "HH:MM"}, ...]), et recalcule la durée totale du jour (somme des
+    plages, + le surplus éventuel déjà enregistré sans session — voir `_untracked_surplus`) ainsi
+    que `first_start_at` (début de la première plage) à partir de ça.
+
+    Une liste vide, combinée à l'absence de surplus, supprime l'entrée du jour (plus aucune
+    session). Refuse si ce projet est le chrono en cours ET que le jour est aujourd'hui : il faut
+    d'abord l'arrêter.
+    """
+    try:
+        day_date = date.fromisoformat(day)
+    except ValueError:
+        raise ValueError("Date invalide (attendu AAAA-MM-JJ)")
+
+    parsed = [_parse_session_range(day_date, s.get("start", ""), s.get("end", "")) for s in sessions]
+
+    conn = get_connection()
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not project:
+            raise ValueError("Projet introuvable")
+
+        running = _get_running(conn)
+        if running and running["project_id"] == project_id and day == date.today().isoformat():
+            raise ValueError("Ce projet est en cours : arrêtez le chrono avant d'éditer aujourd'hui.")
+
+        _replace_project_day_sessions(conn, project_id, day, parsed)
+        conn.commit()
+        return build_state(conn)
+    finally:
+        conn.close()
+
+
+def set_day_sessions_by_time(day, lines):
+    """Remplace tout le journal in/out d'un jour, tous projets confondus — vue "par heure" de
+    Report. `lines` : [{"start": "HH:MM", "end": "HH:MM", "project": "Nom"}, ...], dans n'importe
+    quel ordre. Crée les projets manquants au besoin (comme start_project). Pour chaque projet
+    touché (ceux qui avaient déjà des heures ce jour-là, et ceux des nouvelles lignes), la durée et
+    `first_start_at` sont recalculés à partir des sessions de CE jour, + le surplus éventuel déjà
+    enregistré sans session (arrondi, durée saisie à la main... — voir `_untracked_surplus`, jamais
+    perdu en silence) ; un projet qui n'a plus ni ligne ni surplus voit son entrée du jour supprimée.
+
+    Refuse si un chronométrage est en cours ET que le jour est aujourd'hui : impossible de
+    distinguer la portion déjà sauvegardée de celle encore en cours, il faut d'abord l'arrêter.
+    """
+    try:
+        day_date = date.fromisoformat(day)
+    except ValueError:
+        raise ValueError("Date invalide (attendu AAAA-MM-JJ)")
+
+    conn = get_connection()
+    try:
+        if _get_running(conn) and day == date.today().isoformat():
+            raise ValueError("Un chronométrage est en cours : arrêtez-le avant d'éditer aujourd'hui.")
+
+        by_project = {}  # project_id -> [(start_at, end_at), ...]
+        for line in lines:
+            name = (line.get("project") or "").strip()
+            if not name:
+                raise ValueError("Nom de projet manquant sur une ligne")
+            start_at, end_at = _parse_session_range(day_date, line.get("start", ""), line.get("end", ""))
+            project_id = get_or_create_project(conn, name)
+            by_project.setdefault(project_id, []).append((start_at, end_at))
+
+        touched_ids = {
+            r["project_id"] for r in conn.execute(
+                "SELECT project_id FROM time_entries WHERE day = ? "
+                "UNION SELECT project_id FROM session_log WHERE day = ?",
+                (day, day),
+            ).fetchall()
+        }
+        touched_ids |= set(by_project.keys())
+
+        for project_id in touched_ids:
+            _replace_project_day_sessions(conn, project_id, day, by_project.get(project_id, []))
+
         conn.commit()
         return build_state(conn)
     finally:

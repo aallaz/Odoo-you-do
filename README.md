@@ -3,7 +3,55 @@
 Petit serveur local (Python, sans framework) qui sert plusieurs pages pour suivre ses heures et les
 synchroniser avec Odoo (feuilles de temps et pointages).
 
-## Démarrage
+## Installer l'application (sans Python)
+
+Les exécutables sont construits automatiquement par [GitHub Actions](.github/workflows/build.yml)
+(PyInstaller ne cross-compile pas : Windows build le `.exe`, macOS build le `.app`). Pour les récupérer :
+sur la page [Actions](../../actions/workflows/build.yml) du dépôt, ouvrir le dernier run réussi
+(ou lancer **Run workflow** s'il n'y en a pas) ; les fichiers `OdooYouDo-windows` et `OdooYouDo-macos`
+sont en bas de page, sous **Artifacts**. Si un tag `v*` a été poussé, ils sont aussi attachés directement
+à la [Release](../../releases) correspondante, sous forme de `.zip`.
+
+Dans les deux cas, il faut aussi récupérer **`.env.example`** depuis le dépôt (bouton *Code* → *Download*,
+ou copier son contenu) : c'est le fichier à compléter avec les identifiants Odoo (jamais embarqué dans
+l'exécutable, à garder uniquement en local).
+
+### Windows
+
+1. Télécharger `OdooYouDo-windows` (ou le `.zip` de la Release) et en extraire `OdooYouDo.exe` dans un
+   dossier à soi (ex. `Documents\OdooYouDo\`).
+2. Copier `.env.example` dans ce **même dossier**, le renommer en `.env`, et le compléter :
+   ```
+   ODOO_URL=https://...
+   ODOO_DB=...              # facultatif
+   ODOO_API_KEY=...
+   ODOO_EMPLOYEE_ID=...
+   ```
+3. Double-cliquer `OdooYouDo.exe`. Une fenêtre sans barre d'adresse s'ouvre avec le menu de l'app
+   (nécessite Chrome ou Edge déjà installés — c'est le cas par défaut sur Windows 10/11).
+4. Au premier lancement, l'exe crée à côté de lui `_assets\` (pages embarquées), `Timer\timer.db` et
+   `launcher.ini` : c'est normal, ce sont les données qui persistent d'un lancement à l'autre.
+
+Pour relancer plus tard : ressortir le même `OdooYouDo.exe` (créer un raccourci sur le Bureau si besoin).
+
+### macOS
+
+1. Télécharger `OdooYouDo-macos` (ou le `.zip` de la Release) et en extraire `OdooYouDo.app` dans un
+   dossier à soi (ex. `Documents/OdooYouDo/`).
+2. Copier `.env.example` dans ce **même dossier**, le renommer en `.env`, et le compléter (voir le
+   contenu ci-dessus, section Windows).
+3. L'app n'est **pas signée** (pas de compte développeur Apple) : un double-clic direct sera bloqué par
+   Gatekeeper (« ne peut pas être ouvert »). Pour l'autoriser une fois :
+   - clic droit (ou Ctrl+clic) sur `OdooYouDo.app` → **Ouvrir** → confirmer **Ouvrir** dans la boîte de
+     dialogue ; ou
+   - en Terminal, depuis le dossier : `xattr -cr OdooYouDo.app`, puis double-cliquer normalement.
+4. Une fenêtre Chrome/Edge sans barre d'adresse s'ouvre avec le menu de l'app (il faut l'un des deux
+   déjà installé ; sinon ça ouvre le navigateur par défaut).
+
+Pour relancer plus tard : double-cliquer `OdooYouDo.app` normalement (l'étape 3 n'est nécessaire
+qu'une fois, sauf si macOS re-bloque après une mise à jour de l'app).
+
+## Démarrage depuis les sources (pour développer)
 
 Prérequis : [Python 3](https://www.python.org/downloads/) (Windows : cocher « Add python.exe to PATH ») et,
 pour la fenêtre « app », Chrome, Edge ou Chromium (sinon le navigateur par défaut est utilisé).
@@ -18,35 +66,38 @@ Sous Windows, double-cliquer `lancer.vbs` fait la même chose sans fenêtre de c
 
 Pour lancer le serveur seul : `python server.py` (http://127.0.0.1:8000).
 
-Copier `.env.example` en `.env` à la racine et compléter :
-
-```
-ODOO_URL=https://...
-ODOO_DB=...              # facultatif
-ODOO_API_KEY=...
-ODOO_EMPLOYEE_ID=...
-```
+Copier `.env.example` en `.env` à la racine et compléter (voir le contenu plus haut).
 
 Le `.env` contient une clé API : ne pas le partager ni le versionner (`.gitignore` l'exclut déjà).
 
-## Exécutable Windows (sans Python)
-
-Pour quelqu'un qui n'a pas Python installé : un `.exe` autonome se construit avec PyInstaller.
+## Construire l'exécutable soi-même
 
 ```bash
 pip install -r requirements-build.txt
-python build_exe.py            # produit dist/OdooYouDo.exe
+python build_exe.py            # produit dist/OdooYouDo.exe (Windows) ou dist/OdooYouDo.app (macOS)
 ```
 
-À distribuer : `dist/OdooYouDo.exe` + un `.env` (voir `.env.example`) placé **à côté** de l'exe
-(jamais embarqué dans l'exécutable). Au premier lancement, l'exe crée à côté de lui `_assets/`
-(pages embarquées, copiées une fois), `Timer/timer.db` et `launcher.ini` — comme en mode source.
-macOS : PyInstaller doit compiler sur un Mac, pas encore mis en place.
+PyInstaller ne cross-compile pas : lancer cette commande sur chaque OS cible (ou passer par le
+workflow GitHub Actions, voir plus haut, qui le fait automatiquement sur Windows et macOS).
 
 ## Données locales non versionnées
 
 `Odoo.zip` et `tasks*.csv` à la racine sont des sauvegardes/exports personnels (vraies heures, vrais noms de
 projets) : ils restent sur le disque mais sont exclus par `.gitignore`, à ne jamais ajouter au dépôt.
+
+## Sauvegarde automatique du Timer
+
+Le serveur copie `Timer/timer.db` vers `Timer/backups/timer-AAAA-MM-JJ.db` au démarrage, puis vérifie une
+fois par heure (une copie par jour, les plus vieilles de 30 jours sont supprimées — voir `timer_store.backup_now`).
+C'est un filet de sécurité purement local (même disque que la base) après une édition malheureuse dans Report,
+pas une vraie sauvegarde externe.
+
+## Déconnexion et chrono oublié
+
+Chaque page envoie un signal (« heartbeat ») au serveur toutes les 15 secondes (`shared/heartbeat.js`). Si plus
+aucun signal n'arrive pendant 5 minutes (fenêtre fermée, PC en veille...), le chrono en cours est arrêté
+automatiquement. Éditer le journal du jour (Report) alors qu'un chrono tourne aujourd'hui le demande d'abord à
+l'ouverture de l'éditeur (jamais après coup, à l'enregistrement) pour ne jamais perdre la session en cours.
 
 ## Style
 
@@ -63,7 +114,7 @@ Une page n'ajoute dans son `<style>` que ses règles propres. Les pages de l'anc
 | `/export-timesheet` | `ExportTimeSheet/` | Envoie les heures du Timer vers Odoo (`account.analytic.line`) ou en CSV |
 | `/hours` | `Hours/` | Heures de pointage Odoo par jour (lecture seule) |
 | `/gohome` | `GoHome/` | Heure de sortie calculée depuis les pointages du jour |
-| `/report` | `Report/` | Rapport journalier par projet |
+| `/report` | `Report/` | Rapport journalier par projet, éditable jour par jour : par projet (durée, ou sessions détaillées) ou par heure (journal chronologique tous projets confondus) |
 
 `daily-project-report/` est un plugin Super Productivity (le rapport `/report` en vient).
 Les données Super Productivity ne sont pas utilisées par l'import.
@@ -111,6 +162,8 @@ Les fichiers `import-test.xlsx` et `import-test.csv` à la racine sont des exemp
 | GET | `/api/timer/state` | État du Timer (projets, historique, timer en cours) |
 | GET | `/api/timer/log?day=AAAA-MM-JJ` | Journal in/out de la journée (tous projets), triés par heure de début ; `day` par défaut = aujourd'hui |
 | POST | `/api/timer/start`, `/api/timer/stop` | Démarre / arrête le timer |
+| POST | `/api/timer/set-sessions` | `{id, date, sessions: [{start, end}, ...]}` → remplace les sessions d'un (projet, jour) sans perdre un éventuel temps déjà enregistré sans session (arrondi, saisie manuelle...) ; refusé si ce projet est le chrono en cours et que `date` est aujourd'hui |
+| POST | `/api/timer/set-day-log` | `{date, sessions: [{start, end, project}, ...]}` → pareil, mais remplace tout le journal d'un jour, tous projets confondus (vue « Par heure » de Report) ; refusé si un chrono tourne et que `date` est aujourd'hui |
 | POST | `/api/timer/set-start` | `{start: "HH:MM"}` → redéfinit le début du chrono en cours sans l'arrêter |
 | POST | `/api/timer/rename` | `{id, name}` → renomme un projet du Timer |
 | POST | `/api/timer/stop-at` | `{end: "HH:MM"}` → arrête le timer en cours à une heure choisie plutôt que "maintenant" |

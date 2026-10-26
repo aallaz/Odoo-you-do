@@ -71,13 +71,28 @@ timer_store.init_db()
 timer_store.seed_entry("26006_EXH_W&W2027_Scéno LAB & EXPO", "2026-09-14", 4 * 3600)
 timer_store.seed_entry("Séance", "2026-09-14", 1 * 3600)
 
+
+def _watch_daily_backup():
+    # Tourne en tâche de fond (jamais dans le thread principal, qui doit pouvoir accepter des
+    # requêtes tout de suite) : une sauvegarde dès le démarrage, puis une vérification par heure
+    # (voir timer_store.backup_now, qui ne refait rien si celle du jour existe déjà).
+    while True:
+        try:
+            timer_store.backup_now()
+        except Exception:
+            pass  # pas grave : la prochaine heure, ou le prochain démarrage, rattrape
+        time.sleep(3600)
+
+
+threading.Thread(target=_watch_daily_backup, daemon=True).start()
+
 # Détection de déconnexion : chaque page de l'app envoie un heartbeat (voir shared/heartbeat.js).
 # Si plus aucun n'arrive pendant HEARTBEAT_TIMEOUT (fenêtre fermée, PC éteint/en veille...), on
 # considère l'utilisateur parti et on arrête le chrono en cours. `_last_heartbeat` démarre à l'heure
 # de lancement du serveur : si la fenêtre n'a jamais été ouverte (ou vient d'être relancée), on laisse
 # le même délai de grâce avant de couper, plutôt que de couper instantanément faute de heartbeat.
-HEARTBEAT_TIMEOUT = 60
-HEARTBEAT_CHECK_INTERVAL = 10
+HEARTBEAT_TIMEOUT = 300
+HEARTBEAT_CHECK_INTERVAL = 20
 _heartbeat_lock = threading.Lock()
 _last_heartbeat = time.time()
 
@@ -214,6 +229,31 @@ class Handler(BaseHTTPRequestHandler):
                     str(payload.get("date")),
                     payload.get("start", ""),
                     payload.get("end", ""),
+                )
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/set-sessions":
+            try:
+                state = timer_store.set_day_sessions(
+                    int(payload.get("id")),
+                    str(payload.get("date")),
+                    payload.get("sessions") or [],
+                )
+            except (TypeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, status=400)
+                return
+            self._send_json(state)
+            return
+
+        if path == "/api/timer/set-day-log":
+            try:
+                state = timer_store.set_day_sessions_by_time(
+                    str(payload.get("date")),
+                    payload.get("sessions") or [],
                 )
             except (TypeError, ValueError) as exc:
                 self._send_json({"error": str(exc)}, status=400)

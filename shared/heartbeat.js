@@ -11,4 +11,9 @@
   }
   ping();
   setInterval(ping, 15000);
+  // Un onglet mis en arrière-plan peut voir son setInterval ralenti par le navigateur (ou suspendu
+  // sur mobile) : un ping immédiat au retour évite un faux "déconnecté" côté serveur.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') ping();
+  });
 })();

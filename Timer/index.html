@@ -470,7 +470,13 @@
   let editingId = null;    // id du projet dont la bulle est ouverte en édition, ou null
   let dayLog = [];         // journal in/out du jour (chargé uniquement en mode édition)
 
-  const todayISO = () => new Date().toISOString().slice(0, 10);
+  // Date locale (jour civil), pas new Date().toISOString() : celle-ci est en UTC, donc fausse
+  // pendant 1-2h après minuit en heure d'été/hiver (le serveur, lui, raisonne en date locale).
+  const todayISO = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
 
   function fmt(mins) {
     mins = Math.round(mins);
@@ -947,6 +953,14 @@
   });
 
   loadState();
+  // Au retour sur l'onglet (après mise en arrière-plan, veille...), on resynchronise avec le serveur :
+  // si le heartbeat a entre-temps arrêté le chrono (vraie déconnexion), l'affichage doit le refléter
+  // plutôt que de continuer à compter dans le vide côté client. Jamais pendant qu'une bulle d'édition
+  // est ouverte (editingId !== null) : ça remplacerait la saisie en cours par l'état serveur, comme
+  // le tick d'1s plus bas l'évite déjà pour la même raison.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && editingId === null) loadState();
+  });
   setInterval(() => { if (editMode) refreshDayLog(); }, 5000);
   setInterval(() => {
     // Pendant qu'une bulle est ouverte en édition, on ne reconstruit pas toute la liste (la saisie

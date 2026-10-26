@@ -54,6 +54,29 @@
 
   .day-heading strong { color: var(--strong); font-size: 17px; font-weight: 600; }
 
+  .day-toolbar-actions { display: flex; align-items: center; gap: 8px; }
+
+  .day-view-toggle { display: flex; gap: 6px; }
+
+  .view-btn {
+    border: var(--border);
+    background: var(--card);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 0 12px;
+    height: 40px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+  }
+
+  .view-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .view-btn.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+  .chrono-time { font-variant-numeric: tabular-nums; white-space: nowrap; width: 1%; }
+
   tr.day-row.editable { cursor: pointer; }
 
   tr.day-row.editable:hover td { background: var(--bg); }
@@ -69,28 +92,6 @@
 
   .edit-form-title { margin: 0; font-size: 14px; font-weight: 500; color: var(--strong); }
 
-  .edit-time-row { display: flex; gap: 10px; }
-
-  .edit-time-row label {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .edit-time-row input[type="time"] {
-    border: var(--border);
-    border-radius: 10px;
-    padding: 7px 8px;
-    font-size: 14px;
-    font-family: inherit;
-    color: var(--ink);
-    background: var(--bg);
-  }
-
   .edit-or { font-size: 11px; opacity: 0.6; text-align: center; }
 
   .edit-duration-wrap {
@@ -102,7 +103,7 @@
     letter-spacing: 0.05em;
   }
 
-  .edit-duration-wrap input {
+  .edit-duration-wrap input, .edit-duration-wrap textarea {
     border: var(--border);
     border-radius: 10px;
     padding: 7px 8px;
@@ -112,6 +113,12 @@
     letter-spacing: normal;
     color: var(--ink);
     background: var(--bg);
+  }
+
+  .edit-duration-wrap textarea {
+    resize: vertical;
+    min-height: 70px;
+    font-variant-numeric: tabular-nums;
   }
 
   .edit-hint { font-size: 11px; margin: 0; opacity: 0.7; }
@@ -166,6 +173,7 @@
 <script>
   // --- Données (chargées depuis le même backend que Timer : Timer/timer_store.py + Timer/timer.db) ---
   let projects = [];
+  let runningState = null; // {projectId, projectName, startedAt} ou null — voir ensureNotRunningForToday
 
   async function loadProjects() {
     const res = await fetch('/api/timer/state', { cache: 'no-store' });
@@ -175,6 +183,34 @@
 
   function applyState(state) {
     projects = state.projects;
+    runningState = state.running || null;
+  }
+
+  // Date locale (jour civil), pas new Date().toISOString() : celle-ci est en UTC, donc fausse
+  // pendant 1-2h après minuit en heure d'été/hiver (le serveur, lui, raisonne en date locale).
+  const todayISO = () => {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+
+  // Éditer aujourd'hui pendant qu'un chrono tourne est dangereux : le journal pré-rempli à
+  // l'ouverture de l'éditeur ne contient pas encore la session en cours, donc l'arrêter APRÈS coup
+  // (au moment d'enregistrer) ferait disparaître cette session à la sauvegarde (elle n'est pas dans
+  // le texte édité). On vérifie donc ICI, avant d'ouvrir l'éditeur, jamais à l'enregistrement.
+  // `projectId` : si fourni, ne bloque que si c'est CE projet qui tourne (édition "Par projet") ;
+  // sinon bloque si N'IMPORTE QUEL projet tourne (édition "Par heure", qui touche tous les projets).
+  async function ensureNotRunningForToday(day, projectId) {
+    if (day !== todayISO() || !runningState) return true;
+    if (projectId != null && runningState.projectId !== projectId) return true;
+
+    if (!confirm(`Le chrono tourne sur "${runningState.projectName}".\n\nL'arrêter maintenant pour pouvoir éditer aujourd'hui ?`)) {
+      return false;
+    }
+    await fetch('/api/timer/stop', { method: 'POST' });
+    await loadProjects();
+    currentReport = buildReport(startInput.value, endInput.value);
+    return true;
   }
 
   function fmt(mins) {
@@ -244,6 +280,7 @@
   let currentReport = null;
   let dayEditMode = false;
   let editingProjectId = null;
+  let editingSessions = []; // sessions {startAt, endAt} du (projet, jour) dont la bulle d'édition est ouverte
   const reportWrap = document.getElementById('reportWrap');
   const startInput = document.getElementById('startDate');
   const endInput = document.getElementById('endDate');
@@ -252,6 +289,7 @@
     currentReport = report;
     dayEditMode = false;
     editingProjectId = null;
+    editingSessions = [];
 
     if (!report.days.length) {
       reportWrap.innerHTML = `<p class="empty-state">Aucun temps enregistré sur cette période.</p>`;
@@ -284,67 +322,196 @@
     });
   }
 
-  // --- Vue d'un jour : seule vue où l'édition (durée par projet) est possible ---
-  function renderDay(day) {
-    const rows = currentReport.visibleProjects
-      .map((p) => ({
-        p,
-        mins: (currentReport.cells[day] || {})[p.id] || 0,
-        startedAt: (currentReport.startedAtMap[day] || {})[p.id] || null,
-      }))
-      .filter((row) => row.mins > 0)
-      .sort((a, b) => b.mins - a.mins);
+  // Un seul bouton "Retour" à la fois : toujours retirer l'ancien avant d'en poser un nouveau
+  // (sinon chaque re-rendu de la vue jour — édition, sauvegarde, changement de mode — en empile un).
+  function setBackButton(onClick) {
+    document.querySelectorAll('.back-to-table').forEach((el) => el.remove());
+    const backBtn = document.createElement('button');
+    backBtn.className = 'back-to-table';
+    backBtn.textContent = '← Retour au rapport';
+    backBtn.addEventListener('click', () => { backBtn.remove(); onClick(); });
+    reportWrap.after(backBtn);
+  }
 
-    const rowsHtml = rows.map((row) => renderDayRow(row, day)).join('');
+  // --- Vue d'un jour : deux modes --- "Par projet" (total + édition des sessions d'un projet) et
+  // "Par heure" (journal chronologique de tous les projets du jour, lecture seule).
+  let dayViewMode = 'project'; // 'project' | 'chrono'
 
-    reportWrap.innerHTML = `
+  async function fetchAllDaySessions(day) {
+    const res = await fetch(`/api/timer/log?day=${day}`, { cache: 'no-store' });
+    return res.json(); // [{projectId, projectName, startAt, endAt}], endAt=null si en cours
+  }
+
+  async function renderDay(day) {
+    const toolbarHtml = `
       <div class="day-toolbar">
         <div class="day-heading">
           <span>${fmtDay(day)}</span>
           <strong>${fmt(currentReport.dayTotals[day] || 0)}</strong>
         </div>
-        <button class="icon-btn ${dayEditMode ? 'active' : ''}" id="dayEditBtn" type="button" title="Éditer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 20h9"/>
-            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-          </svg>
-        </button>
-      </div>
-      <table>
-        <thead><tr><th>Projet</th><th>Temps</th></tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>`;
+        <div class="day-toolbar-actions">
+          <div class="day-view-toggle">
+            <button class="view-btn ${dayViewMode === 'project' ? 'active' : ''}" data-mode="project" type="button">Par projet</button>
+            <button class="view-btn ${dayViewMode === 'chrono' ? 'active' : ''}" data-mode="chrono" type="button">Par heure</button>
+          </div>
+          <button class="icon-btn ${dayEditMode ? 'active' : ''}" id="dayEditBtn" type="button" title="Éditer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"/>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+            </svg>
+          </button>
+        </div>
+      </div>`;
 
-    reportWrap.querySelector('#dayEditBtn').addEventListener('click', () => {
-      dayEditMode = !dayEditMode;
-      editingProjectId = null;
-      renderDay(day);
-    });
+    if (dayViewMode === 'chrono') {
+      const sessions = (await fetchAllDaySessions(day)).sort((a, b) => a.startAt - b.startAt);
 
-    if (dayEditMode) {
-      reportWrap.querySelectorAll('tr.day-row.editable[data-id]').forEach((tr) => {
-        tr.addEventListener('click', () => {
-          editingProjectId = Number(tr.dataset.id);
+      if (dayEditMode) {
+        const lines = sessions
+          .filter((s) => s.endAt)
+          .map((s) => `${fmtHHMM(new Date(s.startAt * 1000))}-${fmtHHMM(new Date(s.endAt * 1000))} ${s.projectName}`)
+          .join('\n');
+        reportWrap.innerHTML = `
+          ${toolbarHtml}
+          <div class="edit-form">
+            <label class="edit-duration-wrap">Journal du jour (une ligne par session : HH:MM-HH:MM Projet)
+              <textarea class="edit-day-log" rows="8">${escapeHtml(lines)}</textarea>
+            </label>
+            <p class="edit-hint">Enregistrer remplace tout le journal de ce jour, tous projets confondus. Un projet tapé qui n'existe pas encore est créé.</p>
+            <div class="edit-actions">
+              <button class="edit-cancel" id="chronoCancelBtn" type="button">Annuler</button>
+              <button class="edit-save" id="chronoSaveBtn" type="button">Enregistrer</button>
+            </div>
+          </div>`;
+        document.getElementById('chronoCancelBtn').addEventListener('click', () => {
+          dayEditMode = false;
           renderDay(day);
         });
-      });
-      const editingRow = reportWrap.querySelector('tr.day-row-editing');
-      if (editingRow) {
-        const id = Number(editingRow.dataset.id);
-        editingRow.querySelector('.edit-cancel').addEventListener('click', () => {
-          editingProjectId = null;
-          renderDay(day);
+        document.getElementById('chronoSaveBtn').addEventListener('click', () => saveDayLog(day));
+      } else {
+        const rowsHtml = sessions.map((s) => {
+          const inTxt = fmtHHMM(new Date(s.startAt * 1000));
+          const outTxt = s.endAt ? fmtHHMM(new Date(s.endAt * 1000)) : 'en cours';
+          return `<tr><td class="chrono-time">${inTxt}-${outTxt}</td><td>${escapeHtml(s.projectName)}</td></tr>`;
+        }).join('');
+        reportWrap.innerHTML = `
+          ${toolbarHtml}
+          <table>
+            <thead><tr><th>Horaire</th><th>Projet</th></tr></thead>
+            <tbody>${rowsHtml || '<tr><td colspan="2" class="empty-state">Aucune session détaillée pour ce jour.</td></tr>'}</tbody>
+          </table>`;
+      }
+    } else {
+      const rows = currentReport.visibleProjects
+        .map((p) => ({
+          p,
+          mins: (currentReport.cells[day] || {})[p.id] || 0,
+          startedAt: (currentReport.startedAtMap[day] || {})[p.id] || null,
+        }))
+        .filter((row) => row.mins > 0)
+        .sort((a, b) => b.mins - a.mins);
+      const rowsHtml = rows.map((row) => renderDayRow(row, day)).join('');
+
+      reportWrap.innerHTML = `
+        ${toolbarHtml}
+        <table>
+          <thead><tr><th>Projet</th><th>Temps</th></tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>`;
+
+      if (dayEditMode) {
+        reportWrap.querySelectorAll('tr.day-row.editable[data-id]').forEach((tr) => {
+          tr.addEventListener('click', async () => {
+            const id = Number(tr.dataset.id);
+            if (!(await ensureNotRunningForToday(day, id))) return;
+            editingSessions = await fetchDaySessions(day, id);
+            editingProjectId = id;
+            renderDay(day);
+          });
         });
-        editingRow.querySelector('.edit-save').addEventListener('click', () => saveDayEdit(id, day));
-        editingRow.querySelector('.edit-delete').addEventListener('click', () => deleteDayEdit(id, day));
+        const editingRow = reportWrap.querySelector('tr.day-row-editing');
+        if (editingRow) {
+          const id = Number(editingRow.dataset.id);
+          editingRow.querySelector('.edit-cancel').addEventListener('click', () => {
+            editingProjectId = null;
+            editingSessions = [];
+            renderDay(day);
+          });
+          editingRow.querySelector('.edit-save').addEventListener('click', () => saveDayEdit(id, day));
+          editingRow.querySelector('.edit-delete').addEventListener('click', () => deleteDayEdit(id, day));
+        }
       }
     }
 
-    const backBtn = document.createElement('button');
-    backBtn.className = 'back-to-table';
-    backBtn.textContent = '← Retour au rapport';
-    backBtn.addEventListener('click', () => { backBtn.remove(); renderTable(currentReport); });
-    reportWrap.after(backBtn);
+    reportWrap.querySelector('#dayEditBtn').addEventListener('click', async () => {
+      // "Par heure" touche tous les projets d'un coup : on bloque sur N'IMPORTE QUEL chrono en
+      // cours avant même d'ouvrir l'éditeur (voir ensureNotRunningForToday). "Par projet" n'a pas
+      // ce problème ici : le blocage, plus ciblé, se fait au clic sur la ligne du projet concerné.
+      if (!dayEditMode && dayViewMode === 'chrono' && !(await ensureNotRunningForToday(day))) return;
+      dayEditMode = !dayEditMode;
+      editingProjectId = null;
+      editingSessions = [];
+      renderDay(day);
+    });
+
+    reportWrap.querySelectorAll('.view-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (btn.dataset.mode === dayViewMode) return;
+        dayViewMode = btn.dataset.mode;
+        dayEditMode = false;
+        editingProjectId = null;
+        editingSessions = [];
+        renderDay(day);
+      });
+    });
+
+    setBackButton(() => renderTable(currentReport));
+  }
+
+  // Filet de sécurité pour une course rare (un chrono démarre ailleurs pendant que l'éditeur est
+  // ouvert ici) : ensureNotRunningForToday() bloque déjà normalement AVANT d'ouvrir l'éditeur, donc
+  // ce cas ne devrait plus arriver en pratique. Si ça arrive quand même, on arrête le chrono puis on
+  // FERME l'éditeur (jamais de ré-enregistrement automatique avec le texte déjà tapé : ce texte ne
+  // contient pas la session qu'on vient de clore, la renvoyer telle quelle l'effacerait).
+  async function handleSaveError(error, day) {
+    if (/en cours/.test(error) && confirm(`${error}\n\nArrêter le chrono maintenant ? (il faudra rouvrir l'édition pour inclure cette dernière session)`)) {
+      await fetch('/api/timer/stop', { method: 'POST' });
+      await loadProjects();
+      currentReport = buildReport(startInput.value, endInput.value);
+      dayEditMode = false;
+      editingProjectId = null;
+      editingSessions = [];
+      renderDay(day);
+      return;
+    }
+    alert(error);
+  }
+
+  async function saveDayLog(day) {
+    const text = reportWrap.querySelector('.edit-day-log').value.trim();
+    if (!text) {
+      if (!confirm('Vider complètement le journal de ce jour (toutes les sessions, tous projets) ?')) return;
+    }
+    const sessions = [];
+    for (const raw of text.split('\n')) {
+      const line = raw.trim();
+      if (!line) continue;
+      const m = line.match(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s+(.+)$/);
+      if (!m) { alert(`Ligne invalide (attendu HH:MM-HH:MM Projet) : "${line}"`); return; }
+      sessions.push({ start: m[1], end: m[2], project: m[3].trim() });
+    }
+    const res = await fetch('/api/timer/set-day-log', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: day, sessions }),
+    });
+    const data = await res.json();
+    if (data.error) { await handleSaveError(data.error, day); return; }
+    applyState(data);
+
+    dayEditMode = false;
+    currentReport = buildReport(startInput.value, endInput.value);
+    renderDay(day);
   }
 
   function renderDayRow(row, day) {
@@ -356,26 +523,30 @@
     return `<tr${editableAttrs} data-id="${p.id}"><td>${escapeHtml(p.name)}</td><td><strong>${fmt(mins)}</strong></td></tr>`;
   }
 
+  // Journal in/out du jour (toutes projets), filtré sur un projet : /api/timer/log ne couvre que
+  // les sessions démarrées depuis l'ajout de cette fonctionnalité (rien de rétroactif).
+  async function fetchDaySessions(day, projectId) {
+    const res = await fetch(`/api/timer/log?day=${day}`, { cache: 'no-store' });
+    const rows = await res.json();
+    return rows.filter((s) => s.projectId === projectId && s.endAt); // sessions closes seulement
+  }
+
   function renderDayEditRow(p, mins, startedAt) {
-    const knownStart = startedAt ? new Date(startedAt * 1000) : null;
-    const startVal = knownStart ? fmtHHMM(knownStart) : '';
-    const hint = knownStart
-      ? `Actuellement ${fmt(mins)}, débuté à ${fmtHHMM(knownStart)}`
-      : `Actuellement ${fmt(mins)} — heure de début inconnue`;
+    const sessionLines = editingSessions
+      .map((s) => `${fmtHHMM(new Date(s.startAt * 1000))}-${fmtHHMM(new Date(s.endAt * 1000))}`)
+      .join('\n');
+    const hint = editingSessions.length
+      ? `Une ligne par session (HH:MM-HH:MM). Enregistrer remplace tout le journal de ce jour pour ce projet.`
+      : `Aucune session détaillée connue pour ce jour (${fmt(mins)} au total${startedAt ? `, débuté à ${fmtHHMM(new Date(startedAt * 1000))}` : ''}) — remplis les plages ci-dessous, ou utilise Durée totale.`;
     return `
       <tr class="day-row-editing" data-id="${p.id}">
         <td colspan="2">
           <div class="edit-form">
             <p class="edit-form-title">${escapeHtml(p.name)}</p>
-            <div class="edit-time-row">
-              <label>Début
-                <input class="edit-start" type="time" value="${startVal}">
-              </label>
-              <label>Fin
-                <input class="edit-end" type="time" value="">
-              </label>
-            </div>
-            <p class="edit-or">— ou, si l'heure de début est inconnue —</p>
+            <label class="edit-duration-wrap">Sessions
+              <textarea class="edit-sessions" rows="4" placeholder="10:50-11:20&#10;12:15-12:35">${escapeHtml(sessionLines)}</textarea>
+            </label>
+            <p class="edit-or">— ou, si tu ne connais pas les horaires détaillés —</p>
             <label class="edit-duration-wrap">Durée totale
               <input class="edit-duration" type="text" placeholder="ex. 1h30, 1:30, 2.5">
             </label>
@@ -394,9 +565,25 @@
     const row = reportWrap.querySelector(`tr.day-row-editing[data-id="${id}"]`);
     if (!row) { editingProjectId = null; renderDay(day); return; }
 
+    const sessionsText = row.querySelector('.edit-sessions').value.trim();
     const durationVal = row.querySelector('.edit-duration').value.trim();
     let data;
-    if (durationVal) {
+    if (sessionsText) {
+      // Une ligne par session : remplace tout le journal in/out du jour pour ce projet.
+      const lines = sessionsText.split('\n').map((l) => l.trim()).filter(Boolean);
+      const sessions = [];
+      for (const line of lines) {
+        const m = line.match(/^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+        if (!m) { alert(`Ligne invalide (attendu HH:MM-HH:MM) : "${line}"`); return; }
+        sessions.push({ start: m[1], end: m[2] });
+      }
+      const res = await fetch('/api/timer/set-sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, date: day, sessions }),
+      });
+      data = await res.json();
+    } else if (durationVal) {
       // Durée directe : ne demande pas l'heure de début, remplace juste le total du (projet, jour).
       const hours = parseDurationHours(durationVal);
       if (hours === null) { alert('Durée invalide (attendu 1h30, 1:30 ou 2.5)'); return; }
@@ -407,20 +594,14 @@
       });
       data = await res.json();
     } else {
-      const startVal = row.querySelector('.edit-start').value;
-      const endVal = row.querySelector('.edit-end').value;
-      if (!startVal || !endVal) { alert('Indique Début et Fin, ou une durée totale.'); return; }
-      const res = await fetch('/api/timer/set-duration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, date: day, start: startVal, end: endVal }),
-      });
-      data = await res.json();
+      alert('Indique au moins une session (HH:MM-HH:MM), ou une durée totale.');
+      return;
     }
-    if (data.error) { alert(data.error); return; }
+    if (data.error) { await handleSaveError(data.error, day); return; }
     applyState(data);
 
     editingProjectId = null;
+    editingSessions = [];
     currentReport = buildReport(startInput.value, endInput.value);
     renderDay(day);
   }
@@ -433,9 +614,10 @@
       body: JSON.stringify({ id, date: day }),
     });
     const data = await res.json();
-    if (data.error) { alert(data.error); return; }
+    if (data.error) { await handleSaveError(data.error, day); return; }
     applyState(data);
     editingProjectId = null;
+    editingSessions = [];
     currentReport = buildReport(startInput.value, endInput.value);
     renderDay(day);
   }
@@ -491,11 +673,7 @@
   function renderRoundPreview(changes, dayTotals, start, end, unit) {
     if (!changes.length) {
       reportWrap.innerHTML = `<p class="empty-state">Rien à arrondir du ${start} au ${end} à ${unit} minutes : tout est déjà sur ce pas.</p>`;
-      const backBtn = document.createElement('button');
-      backBtn.className = 'back-to-table';
-      backBtn.textContent = '← Retour au rapport';
-      backBtn.addEventListener('click', () => { backBtn.remove(); refresh(); });
-      reportWrap.after(backBtn);
+      setBackButton(refresh);
       return;
     }
 
