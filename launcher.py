@@ -142,7 +142,18 @@ def main():
     browser = find_browser()
     if browser:
         subprocess.Popen(
-            [browser, f"--app={url}", f"--window-size={win_w},{win_h}"],
+            [
+                browser,
+                f"--app={url}",
+                f"--window-size={win_w},{win_h}",
+                # Sans ça, Chrome/Edge ralentit (voire gèle) les timers JS de la fenêtre dès qu'elle
+                # est cachée derrière une autre fenêtre (pas besoin d'être minimisée) : le heartbeat
+                # (shared/heartbeat.js) s'arrête silencieusement et le serveur coupe le chrono au bout
+                # de HEARTBEAT_TIMEOUT alors que l'utilisateur travaille toujours.
+                "--disable-backgrounding-occluded-windows",
+                "--disable-renderer-backgrounding",
+                "--disable-background-timer-throttling",
+            ],
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
         if sys.platform == "win32":
