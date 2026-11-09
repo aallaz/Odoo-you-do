@@ -71,6 +71,26 @@ timer_store.init_db()
 timer_store.seed_entry("26006_EXH_W&W2027_Scéno LAB & EXPO", "2026-09-14", 4 * 3600)
 timer_store.seed_entry("Séance", "2026-09-14", 1 * 3600)
 
+# Si le serveur (donc la machine) était éteint pendant qu'un chrono tournait, on l'arrête à l'heure
+# du dernier signal connu plutôt que d'encaisser tout le temps d'extinction (voir
+# timer_store.recover_stale_running et le thread _watch_running_heartbeat plus bas).
+timer_store.recover_stale_running()
+
+
+def _watch_running_heartbeat():
+    # Marque régulièrement "le serveur est vivant" pendant qu'un chrono tourne, pour que
+    # recover_stale_running puisse détecter au prochain démarrage un silence dû à l'extinction/veille
+    # de la machine (et pas à du temps de travail réel).
+    while True:
+        time.sleep(60)
+        try:
+            timer_store.touch_running()
+        except Exception:
+            pass
+
+
+threading.Thread(target=_watch_running_heartbeat, daemon=True).start()
+
 
 def _watch_daily_backup():
     # Tourne en tâche de fond (jamais dans le thread principal, qui doit pouvoir accepter des
@@ -86,29 +106,35 @@ def _watch_daily_backup():
 
 threading.Thread(target=_watch_daily_backup, daemon=True).start()
 
-# Détection de déconnexion : chaque page de l'app envoie un heartbeat (voir shared/heartbeat.js).
-# Si plus aucun n'arrive pendant HEARTBEAT_TIMEOUT (fenêtre fermée, PC éteint/en veille...), on
-# considère l'utilisateur parti et on arrête le chrono en cours. `_last_heartbeat` démarre à l'heure
-# de lancement du serveur : si la fenêtre n'a jamais été ouverte (ou vient d'être relancée), on laisse
-# le même délai de grâce avant de couper, plutôt que de couper instantanément faute de heartbeat.
-HEARTBEAT_TIMEOUT = 300
-HEARTBEAT_CHECK_INTERVAL = 20
-_heartbeat_lock = threading.Lock()
-_last_heartbeat = time.time()
+# Le chrono ne s'arrête plus automatiquement sur absence de heartbeat : le throttling des timers
+# JS par Chrome/Edge (fenêtre minimisée, veille partielle...) provoquait des faux "déconnecté" et
+# coupait le chrono alors que l'utilisateur travaillait toujours. /api/heartbeat répond encore
+# (voir plus bas) pour ne pas casser shared/heartbeat.js, mais ne déclenche plus rien côté serveur.
+#
+# À la place : on arrête le chrono si Odoo indique un départ pointé aujourd'hui (hr.attendance avec
+# check_out rempli sur le dernier pointage) — un signal fiable et volontaire de l'utilisateur, plutôt
+# qu'une absence de ping côté navigateur.
+def _watch_odoo_departure():
+    url = os.getenv("ODOO_URL")
+    db = os.getenv("ODOO_DB", "")
+    api_key = os.getenv("ODOO_API_KEY")
+    employee_id = os.getenv("ODOO_EMPLOYEE_ID")
+    if not (url and api_key and employee_id):
+        return  # pas de pointage Odoo configuré : on ne surveille rien
 
-
-def _watch_heartbeat():
     while True:
-        time.sleep(HEARTBEAT_CHECK_INTERVAL)
-        with _heartbeat_lock:
-            elapsed = time.time() - _last_heartbeat
-        if elapsed > HEARTBEAT_TIMEOUT:
-            state = timer_store.get_state()
-            if state.get("running"):
-                timer_store.stop_project()
+        time.sleep(180)
+        if not timer_store.get_state()["running"]:
+            continue  # rien à arrêter, pas besoin d'appeler Odoo
+        try:
+            records = fetch_today_attendance(url, db, api_key, int(employee_id))
+        except (SystemExit, requests.RequestException, ValueError):
+            continue  # API Odoo inaccessible ou identifiants invalides : on ne touche pas au chrono
+        if records and records[-1].get("check_out"):
+            timer_store.stop_project()
 
 
-threading.Thread(target=_watch_heartbeat, daemon=True).start()
+threading.Thread(target=_watch_odoo_departure, daemon=True).start()
 
 # Route (segment d'URL) -> dossier de l'app qui la sert.
 APPS = {
@@ -316,9 +342,6 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/heartbeat":
-            global _last_heartbeat
-            with _heartbeat_lock:
-                _last_heartbeat = time.time()
             self._send_json({"ok": True})
             return
 

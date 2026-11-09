@@ -46,7 +46,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS running_state (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             project_id INTEGER REFERENCES projects(id),
-            started_at REAL
+            started_at REAL,
+            last_seen REAL
         );
         CREATE TABLE IF NOT EXISTS session_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -71,6 +72,9 @@ def init_db():
         conn.execute("ALTER TABLE time_entries ADD COLUMN first_start_at REAL")
     if "archived" not in cols:
         conn.execute("ALTER TABLE time_entries ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
+    running_cols = {row["name"] for row in conn.execute("PRAGMA table_info(running_state)").fetchall()}
+    if "last_seen" not in running_cols:
+        conn.execute("ALTER TABLE running_state ADD COLUMN last_seen REAL")
     conn.commit()
     conn.close()
 
@@ -260,6 +264,53 @@ def _stop_running(conn):
     conn.execute("DELETE FROM running_state WHERE id = 1")
 
 
+def touch_running():
+    """Met à jour `last_seen` du chrono en cours (s'il y en a un) — appelé périodiquement par le
+    serveur tant qu'il tourne, pour pouvoir détecter au prochain démarrage qu'un long silence
+    correspond à la machine éteinte/endormie plutôt qu'à du temps de travail réel (voir
+    recover_stale_running)."""
+    conn = get_connection()
+    try:
+        conn.execute(
+            "UPDATE running_state SET last_seen = ? WHERE id = 1 AND project_id IS NOT NULL",
+            (time.time(),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def recover_stale_running(max_gap_seconds=300):
+    """À appeler une fois au démarrage du serveur. Si un chrono était en cours mais que `last_seen`
+    date de plus de `max_gap_seconds`, le serveur (et donc la machine) a été éteint/endormi pendant ce
+    temps : personne n'a pu mettre à jour last_seen. On arrête alors le chrono à l'heure du dernier
+    signal connu plutôt que d'encaisser tout le temps d'extinction comme temps travaillé.
+    Renvoie True si une récupération a eu lieu."""
+    conn = get_connection()
+    try:
+        running = conn.execute(
+            "SELECT project_id, started_at, last_seen FROM running_state WHERE id = 1"
+        ).fetchone()
+        if not running or running["project_id"] is None:
+            return False
+
+        last_seen = running["last_seen"] or running["started_at"]
+        if time.time() - last_seen <= max_gap_seconds:
+            return False
+
+        elapsed = last_seen - running["started_at"]
+        if elapsed > 0:
+            day = datetime.fromtimestamp(running["started_at"]).date().isoformat()
+            add_entry_seconds(conn, running["project_id"], day, elapsed)
+            _mark_first_start(conn, running["project_id"], day, running["started_at"])
+        _close_session_log(conn, running["project_id"], running["started_at"], last_seen)
+        conn.execute("DELETE FROM running_state WHERE id = 1")
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def get_day_log(day=None):
     """Journal in/out des sessions d'une journée (toutes projets confondus), triées par heure de début.
     Une ligne avec endAt=None est une session encore en cours. Ne couvre que les sessions démarrées
@@ -342,10 +393,11 @@ def start_project(name):
     started_at = time.time()
     conn.execute(
         """
-        INSERT INTO running_state (id, project_id, started_at) VALUES (1, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET project_id = excluded.project_id, started_at = excluded.started_at
+        INSERT INTO running_state (id, project_id, started_at, last_seen) VALUES (1, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            project_id = excluded.project_id, started_at = excluded.started_at, last_seen = excluded.last_seen
         """,
-        (project_id, started_at),
+        (project_id, started_at, started_at),
     )
     conn.execute(
         "INSERT INTO session_log (project_id, day, start_at, end_at) VALUES (?, ?, ?, NULL)",

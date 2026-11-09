@@ -203,6 +203,25 @@
 
   .suggestion.create { color: var(--accent); font-weight: 500; }
 
+  .suggestion .s-tag {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    border: var(--border);
+    border-radius: 6px;
+    padding: 2px 6px;
+    flex-shrink: 0;
+  }
+
+  .suggestion-hint {
+    padding: 11px 16px;
+    font-size: 13px;
+    color: var(--muted);
+    border-top: var(--border);
+  }
+
   .section-label {
     font-size: 12px;
     text-transform: uppercase;
@@ -884,20 +903,71 @@
     activeSuggestionIndex = -1;
   }
 
+  // Suggestions Odoo : en plus de l'historique local, on cherche aussi côté Odoo (nom du projet,
+  // pas forcément déjà utilisé dans le Timer) pour retrouver un projet par son nom même si son nom
+  // complet "<numéro>_..." n'a jamais été tapé ici (ex. "Bravern" -> "20260237_Bravern_...").
+  let odooSearchTimer = null;
+  let odooSearchSeq = 0;
+  let odooResults = [];
+  let odooLoading = false;
+
   function updateSuggestions() {
     const q = projectInput.value.trim().toLowerCase();
     startBtn.disabled = q.length === 0;
 
+    if (!q) { closeSuggestions(); odooResults = []; clearTimeout(odooSearchTimer); return; }
+
+    renderSuggestions();
+
+    clearTimeout(odooSearchTimer);
+    if (q.length >= 2) {
+      odooSearchTimer = setTimeout(() => searchOdooProjects(projectInput.value.trim()), 300);
+    } else {
+      odooResults = [];
+    }
+  }
+
+  async function searchOdooProjects(query) {
+    const seq = ++odooSearchSeq;
+    odooLoading = true;
+    let results = [];
+    try {
+      const res = await fetch(`/api/odoo/projects?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (seq !== odooSearchSeq) return;
+      results = res.ok && Array.isArray(data) ? data : [];
+    } catch (e) {
+      if (seq !== odooSearchSeq) return;
+    }
+    odooLoading = false;
+    odooResults = results;
+    if (projectInput.value.trim() === query) renderSuggestions();
+  }
+
+  function renderSuggestions() {
+    const q = projectInput.value.trim().toLowerCase();
     if (!q) { closeSuggestions(); return; }
 
     const matches = projects.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 5);
     const exact = projects.some((p) => p.name.toLowerCase() === q);
+    const localNames = new Set(projects.map((p) => p.name.toLowerCase()));
 
     let html = matches.map((p) => `
       <div class="suggestion" data-name="${escapeHtml(p.name)}">
         <span>${escapeHtml(p.name)}</span>
         <span class="s-time">${fmt(totalMinutes(p))}</span>
       </div>`).join('');
+
+    const odooMatches = odooResults.filter((p) => !localNames.has(p.name.toLowerCase())).slice(0, 5);
+    if (odooMatches.length) {
+      html += odooMatches.map((p) => `
+        <div class="suggestion" data-name="${escapeHtml(p.name)}">
+          <span>${escapeHtml(p.name)}</span>
+          <span class="s-tag">Odoo</span>
+        </div>`).join('');
+    } else if (odooLoading) {
+      html += `<div class="suggestion-hint">Recherche dans Odoo…</div>`;
+    }
 
     if (!exact) {
       html += `<div class="suggestion create" data-name="${escapeHtml(projectInput.value.trim())}">+ Créer « ${escapeHtml(projectInput.value.trim())} »</div>`;
